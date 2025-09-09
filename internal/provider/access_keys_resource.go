@@ -18,8 +18,8 @@ import (
 )
 
 var (
-	_ resource.Resource                = &AccessKeysResource{}
-	_ resource.ResourceWithConfigure   = &AccessKeysResource{}
+	_ resource.Resource              = &AccessKeysResource{}
+	_ resource.ResourceWithConfigure = &AccessKeysResource{}
 )
 
 // NewAccessKeysResource creates a new instance of the AccessKeysResource.
