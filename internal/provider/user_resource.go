@@ -37,15 +37,15 @@ type UserResource struct {
 
 // UserResourceModel maps the resource schema data.
 type UserResourceModel struct {
-	UserName    types.String `tfsdk:"user_name"`
-	MemberOf    types.List   `tfsdk:"member_of"`
-	FullName    types.String `tfsdk:"full_name"`
-	Disable     types.Bool   `tfsdk:"disable"`
-	ID          types.String `tfsdk:"id"`
-	AccountID   types.String `tfsdk:"account_id"`
-	UniqueName  types.String `tfsdk:"unique_name"`
-	UserURN     types.String `tfsdk:"user_urn"`
-	Federated   types.Bool   `tfsdk:"federated"`
+	UserName   types.String `tfsdk:"user_name"`
+	MemberOf   types.List   `tfsdk:"member_of"`
+	FullName   types.String `tfsdk:"full_name"`
+	Disable    types.Bool   `tfsdk:"disable"`
+	ID         types.String `tfsdk:"id"`
+	AccountID  types.String `tfsdk:"account_id"`
+	UniqueName types.String `tfsdk:"unique_name"`
+	UserURN    types.String `tfsdk:"user_urn"`
+	Federated  types.Bool   `tfsdk:"federated"`
 }
 
 // Metadata returns the resource type name.
