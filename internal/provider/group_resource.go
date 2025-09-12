@@ -465,7 +465,6 @@ func (r *GroupResource) ImportState(ctx context.Context, req resource.ImportStat
 	state.GroupURN = types.StringValue(groupData.GroupURN)
 	state.Federated = types.BoolValue(groupData.Federated)
 	state.ManagementReadOnly = types.BoolValue(groupData.ManagementReadOnly)
-	// state.LastUpdated = types.StringValue(time.Now().Format(time.RFC3339)) // Set a fresh timestamp on import.
 
 	// Populate nested management policy object.
 	state.Policies.Management = ManagementPolicyModel{
