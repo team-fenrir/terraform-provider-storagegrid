@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	awspolicy "github.com/hashicorp/awspolicyequivalence"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -50,7 +49,6 @@ type GroupResourceModel struct {
 	GroupName          types.String          `tfsdk:"group_name"`
 	Policies           PoliciesResourceModel `tfsdk:"policies"`
 	ID                 types.String          `tfsdk:"id"`
-	LastUpdated        types.String          `tfsdk:"last_updated"`
 	AccountID          types.String          `tfsdk:"account_id"`
 	DisplayName        types.String          `tfsdk:"display_name"`
 	UniqueName         types.String          `tfsdk:"unique_name"`
@@ -197,10 +195,6 @@ func (r *GroupResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 					boolplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"last_updated": schema.StringAttribute{
-				Description: "The timestamp of the last update.",
-				Computed:    true,
-			},
 		},
 	}
 }
@@ -263,7 +257,6 @@ func (r *GroupResource) Create(ctx context.Context, req resource.CreateRequest, 
 
 	groupData := createdGroup.Data
 	plan.ID = types.StringValue(groupData.ID)
-	plan.LastUpdated = types.StringValue(time.Now().Format(time.RFC3339))
 	plan.DisplayName = types.StringValue(groupData.DisplayName)
 	plan.UniqueName = types.StringValue(groupData.UniqueName)
 	plan.AccountID = types.StringValue(groupData.AccountID)
@@ -412,7 +405,6 @@ func (r *GroupResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	plan.GroupURN = types.StringValue(groupData.GroupURN)
 	plan.Federated = types.BoolValue(groupData.Federated)
 	plan.ManagementReadOnly = types.BoolValue(groupData.ManagementReadOnly)
-	plan.LastUpdated = types.StringValue(time.Now().Format(time.RFC3339))
 
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
@@ -473,7 +465,6 @@ func (r *GroupResource) ImportState(ctx context.Context, req resource.ImportStat
 	state.GroupURN = types.StringValue(groupData.GroupURN)
 	state.Federated = types.BoolValue(groupData.Federated)
 	state.ManagementReadOnly = types.BoolValue(groupData.ManagementReadOnly)
-	state.LastUpdated = types.StringValue(time.Now().Format(time.RFC3339)) // Set a fresh timestamp on import.
 
 	// Populate nested management policy object.
 	state.Policies.Management = ManagementPolicyModel{

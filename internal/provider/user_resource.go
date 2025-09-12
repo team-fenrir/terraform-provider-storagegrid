@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -38,16 +37,15 @@ type UserResource struct {
 
 // UserResourceModel maps the resource schema data.
 type UserResourceModel struct {
-	UserName    types.String `tfsdk:"user_name"`
-	MemberOf    types.List   `tfsdk:"member_of"`
-	FullName    types.String `tfsdk:"full_name"`
-	Disable     types.Bool   `tfsdk:"disable"`
-	ID          types.String `tfsdk:"id"`
-	LastUpdated types.String `tfsdk:"last_updated"`
-	AccountID   types.String `tfsdk:"account_id"`
-	UniqueName  types.String `tfsdk:"unique_name"`
-	UserURN     types.String `tfsdk:"user_urn"`
-	Federated   types.Bool   `tfsdk:"federated"`
+	UserName   types.String `tfsdk:"user_name"`
+	MemberOf   types.List   `tfsdk:"member_of"`
+	FullName   types.String `tfsdk:"full_name"`
+	Disable    types.Bool   `tfsdk:"disable"`
+	ID         types.String `tfsdk:"id"`
+	AccountID  types.String `tfsdk:"account_id"`
+	UniqueName types.String `tfsdk:"unique_name"`
+	UserURN    types.String `tfsdk:"user_urn"`
+	Federated  types.Bool   `tfsdk:"federated"`
 }
 
 // Metadata returns the resource type name.
@@ -89,10 +87,6 @@ func (r *UserResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
-			},
-			"last_updated": schema.StringAttribute{
-				Description: "The timestamp of the last update.",
-				Computed:    true,
 			},
 			"account_id": schema.StringAttribute{
 				Description: "The account ID associated with the user.",
@@ -182,7 +176,6 @@ func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, r
 	plan.Federated = types.BoolValue(createdUser.Data.Federated)
 	plan.FullName = types.StringValue(createdUser.Data.FullName)
 	plan.Disable = types.BoolValue(createdUser.Data.Disable)
-	plan.LastUpdated = types.StringValue(time.Now().Format(time.RFC3339))
 
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
@@ -312,7 +305,6 @@ func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	plan.UniqueName = types.StringValue(userData.UniqueName)
 	plan.UserURN = types.StringValue(userData.UserURN)
 	plan.Federated = types.BoolValue(userData.Federated)
-	plan.LastUpdated = types.StringValue(time.Now().Format(time.RFC3339))
 
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
@@ -376,7 +368,6 @@ func (r *UserResource) ImportState(ctx context.Context, req resource.ImportState
 	state.UniqueName = types.StringValue(userData.UniqueName)
 	state.UserURN = types.StringValue(userData.UserURN)
 	state.Federated = types.BoolValue(userData.Federated)
-	state.LastUpdated = types.StringValue(time.Now().Format(time.RFC3339))
 
 	var diags diag.Diagnostics
 	state.MemberOf, diags = types.ListValueFrom(ctx, types.StringType, groupNames)
