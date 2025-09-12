@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// Client holds the client configuration
+// Client holds the client configuration.
 type Client struct {
 	EndpointURL string
 	HTTPClient  *http.Client
