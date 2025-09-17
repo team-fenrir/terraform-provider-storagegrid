@@ -37,6 +37,44 @@ var managementAttributeTypes = map[string]attr.Type{
 	"view_all_containers":          types.BoolType,
 }
 
+// normalizeDisplayName returns a plan modifier that sets display_name to match group_name.
+func normalizeDisplayName() planmodifier.String {
+	return &normalizeDisplayNameModifier{}
+}
+
+type normalizeDisplayNameModifier struct{}
+
+func (m *normalizeDisplayNameModifier) Description(ctx context.Context) string {
+	return "Normalizes display_name to match group_name"
+}
+
+func (m *normalizeDisplayNameModifier) MarkdownDescription(ctx context.Context) string {
+	return "Normalizes display_name to match group_name"
+}
+
+func (m *normalizeDisplayNameModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	// If we don't have a group_name in the plan, we can't normalize
+	var plan GroupResourceModel
+	if diags := req.Plan.Get(ctx, &plan); diags.HasError() {
+		// Fall back to UseStateForUnknown behavior
+		if req.StateValue.IsNull() {
+			resp.PlanValue = types.StringUnknown()
+		} else {
+			resp.PlanValue = req.StateValue
+		}
+		return
+	}
+
+	// Set display_name to match group_name
+	if !plan.GroupName.IsNull() && !plan.GroupName.IsUnknown() {
+		resp.PlanValue = types.StringValue(plan.GroupName.ValueString())
+	} else if req.StateValue.IsNull() {
+		resp.PlanValue = types.StringUnknown()
+	} else {
+		resp.PlanValue = req.StateValue
+	}
+}
+
 func NewGroupResource() resource.Resource {
 	return &GroupResource{}
 }
@@ -164,7 +202,7 @@ func (r *GroupResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				Description: "The display name of the group.",
 				Computed:    true,
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
+					normalizeDisplayName(),
 				},
 			},
 			"unique_name": schema.StringAttribute{
@@ -458,8 +496,9 @@ func (r *GroupResource) ImportState(ctx context.Context, req resource.ImportStat
 
 	state.ID = types.StringValue(groupData.ID)
 
-	state.GroupName = types.StringValue(strings.TrimPrefix(groupData.UniqueName, "group/"))
-	state.DisplayName = types.StringValue(groupData.DisplayName)
+	groupName = strings.TrimPrefix(groupData.UniqueName, "group/")
+	state.GroupName = types.StringValue(groupName)
+	state.DisplayName = types.StringValue(groupName)
 	state.UniqueName = types.StringValue(groupData.UniqueName)
 	state.AccountID = types.StringValue(groupData.AccountID)
 	state.GroupURN = types.StringValue(groupData.GroupURN)
