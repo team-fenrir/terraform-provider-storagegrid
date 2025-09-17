@@ -45,6 +45,7 @@ func (p *StorageGridProvider) Metadata(ctx context.Context, req provider.Metadat
 // Schema defines the provider-level schema for configuration data.
 func (p *StorageGridProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "The StorageGrid provider enables Terraform management of StorageGrid IAM resources including users, groups, and access keys. This provider requires StorageGrid with v4 API support and is not compatible with older StorageGrid versions that only support v3 or earlier APIs.",
 		Attributes: map[string]schema.Attribute{
 			"endpoint": schema.StringAttribute{
 				Description: "URI for StorageGrid API. May also be provided via STORAGEGRID_ENDPOINT environment variable.",
