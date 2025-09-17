@@ -7,6 +7,10 @@ description: |-
 
 # storagegrid Provider
 
+## Requirements
+
+This provider requires StorageGrid with v4 API support. It is not compatible with older StorageGrid versions that only support v3 or earlier APIs.
+
 
 
 ## Example Usage
