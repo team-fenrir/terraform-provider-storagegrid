@@ -185,25 +185,7 @@ func (r *S3BucketResource) Create(ctx context.Context, req resource.CreateReques
 	bucketName := plan.Bucket.ValueString()
 	objectLockEnabled := plan.ObjectLockEnabled.ValueBool()
 
-	// Check if bucket already exists
-	exists, err := r.s3Client.BucketExists(ctx, bucketName)
-	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error checking bucket existence",
-			fmt.Sprintf("Unable to check if bucket '%s' exists: %s", bucketName, err),
-		)
-		return
-	}
-
-	if exists {
-		resp.Diagnostics.AddError(
-			"Bucket already exists",
-			fmt.Sprintf("S3 bucket '%s' already exists", bucketName),
-		)
-		return
-	}
-
-	// Create the bucket
+	// Create the bucket directly - let the S3 API handle existence checks
 	var createErr error
 	if objectLockEnabled {
 		// Create bucket with Object Lock enabled
@@ -216,10 +198,21 @@ func (r *S3BucketResource) Create(ctx context.Context, req resource.CreateReques
 	}
 
 	if createErr != nil {
-		resp.Diagnostics.AddError(
-			"Error creating bucket",
-			fmt.Sprintf("Unable to create S3 bucket '%s': %s", bucketName, createErr),
-		)
+		// Parse the error to provide more meaningful messages
+		errorMsg := createErr.Error()
+		if strings.Contains(errorMsg, "BucketAlreadyExists") ||
+		   strings.Contains(errorMsg, "BucketAlreadyOwnedByYou") ||
+		   strings.Contains(errorMsg, "already exists") {
+			resp.Diagnostics.AddError(
+				"Bucket already exists",
+				fmt.Sprintf("S3 bucket '%s' already exists. Bucket names must be globally unique across the StorageGrid system.", bucketName),
+			)
+		} else {
+			resp.Diagnostics.AddError(
+				"Error creating bucket",
+				fmt.Sprintf("Unable to create S3 bucket '%s': %s", bucketName, createErr),
+			)
+		}
 		return
 	}
 
