@@ -5,9 +5,10 @@ package provider
 
 import (
 	"context"
-	"github.com/hashicorp/terraform-plugin-framework/path"
 	"os"
+	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/team-fenrir/terraform-provider-storagegrid/internal/utils"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -16,6 +17,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 // Ensure StorageGridProvider satisfies various provider interfaces.
@@ -46,7 +49,7 @@ type EndpointsModel struct {
 // StorageGridClients holds the various API clients for StorageGrid services.
 type StorageGridClients struct {
 	MgmtClient *utils.Client // nil if no management endpoint configured
-	// S3Client will be added in future when implementing S3 resources
+	S3Client   *minio.Client // nil if no S3 endpoint configured
 }
 
 func (p *StorageGridProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -261,9 +264,39 @@ func (p *StorageGridProvider) Configure(ctx context.Context, req provider.Config
 		tflog.Debug(ctx, "No management endpoint provided, skipping management client creation")
 	}
 
-	// TODO: Create S3 client when S3 endpoint is provided
+	// Create S3 client if endpoint is provided
 	if s3Endpoint != "" {
-		tflog.Debug(ctx, "S3 endpoint provided but S3 client not yet implemented")
+		// Parse S3 endpoint to extract hostname and determine security
+		// Remove protocol prefix if present (https:// or http://)
+		endpoint := s3Endpoint
+		secure := true
+
+		if strings.HasPrefix(endpoint, "https://") {
+			endpoint = strings.TrimPrefix(endpoint, "https://")
+			secure = true
+		} else if strings.HasPrefix(endpoint, "http://") {
+			endpoint = strings.TrimPrefix(endpoint, "http://")
+			secure = false
+		}
+
+		// MinIO client expects credentials for StorageGrid S3 API
+		s3Client, err := minio.New(endpoint, &minio.Options{
+			Creds:  credentials.NewStaticV4(username, password, ""),
+			Secure: secure,
+		})
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Unable to Create StorageGrid S3 API Client",
+				"An unexpected error occurred when creating the StorageGrid S3 API client. "+
+					"If the error is not clear, please contact the provider developers.\n\n"+
+					"StorageGrid S3 Client Error: "+err.Error(),
+			)
+			return
+		}
+		clients.S3Client = s3Client
+		tflog.Debug(ctx, "Successfully created StorageGrid S3 client")
+	} else {
+		tflog.Debug(ctx, "No S3 endpoint provided, skipping S3 client creation")
 	}
 
 	// Make the StorageGrid clients available during DataSource and Resource
