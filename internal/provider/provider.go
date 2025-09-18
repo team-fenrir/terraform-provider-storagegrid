@@ -343,34 +343,50 @@ func (p *StorageGridProvider) Configure(ctx context.Context, req provider.Config
 		)
 	}
 
-	if accountID == "" {
-		resp.Diagnostics.AddAttributeError(
-			path.Root("accountid"),
-			"Missing StorageGrid API AccountID",
-			"The provider cannot create the StorageGrid API client as there is a missing or empty value for the StorageGrid API accountID. "+
-				"Set the accountID value in the configuration or use the STORAGEGRID_ACCOUNTID environment variable. "+
-				"If either is already set, ensure the value is not empty.",
-		)
+	// Only validate management-related credentials if management endpoint is configured
+	if mgmtEndpoint != "" {
+		if accountID == "" {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("accountid"),
+				"Missing StorageGrid API AccountID",
+				"The provider cannot create the StorageGrid Management API client as there is a missing or empty value for the StorageGrid API accountID. "+
+					"Set the accountID value in the configuration or use the STORAGEGRID_ACCOUNTID environment variable. "+
+					"If either is already set, ensure the value is not empty.",
+			)
+		}
+
+		if username == "" {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("username"),
+				"Missing StorageGrid API Username",
+				"The provider cannot create the StorageGrid Management API client as there is a missing or empty value for the StorageGrid API username. "+
+					"Set the username value in the configuration or use the STORAGEGRID_USERNAME environment variable. "+
+					"If either is already set, ensure the value is not empty.",
+			)
+		}
+
+		if password == "" {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("password"),
+				"Missing StorageGrid API Password",
+				"The provider cannot create the StorageGrid Management API client as there is a missing or empty value for the StorageGrid API password. "+
+					"Set the password value in the configuration or use the STORAGEGRID_PASSWORD environment variable. "+
+					"If either is already set, ensure the value is not empty.",
+			)
+		}
 	}
 
-	if username == "" {
-		resp.Diagnostics.AddAttributeError(
-			path.Root("username"),
-			"Missing StorageGrid API Username",
-			"The provider cannot create the StorageGrid API client as there is a missing or empty value for the StorageGrid API username. "+
-				"Set the username value in the configuration or use the STORAGEGRID_USERNAME environment variable. "+
-				"If either is already set, ensure the value is not empty.",
-		)
-	}
-
-	if password == "" {
-		resp.Diagnostics.AddAttributeError(
-			path.Root("password"),
-			"Missing StorageGrid API Password",
-			"The provider cannot create the StorageGrid API client as there is a missing or empty value for the StorageGrid API password. "+
-				"Set the password value in the configuration or use the STORAGEGRID_PASSWORD environment variable. "+
-				"If either is already set, ensure the value is not empty.",
-		)
+	// For S3-only configurations, validate that S3 credentials are provided
+	if mgmtEndpoint == "" && s3Endpoint != "" {
+		if accessKey == "" || secretAccessKey == "" {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("access_key"),
+				"Missing S3 Credentials for S3-Only Configuration",
+				"When only the S3 endpoint is configured (without management endpoint), explicit S3 credentials are required. "+
+					"Please provide both 'access_key' and 'secret_access_key' in the provider configuration, or "+
+					"set both STORAGEGRID_ACCESS_KEY and STORAGEGRID_SECRET_ACCESS_KEY environment variables.",
+			)
+		}
 	}
 
 	if resp.Diagnostics.HasError() {
@@ -447,24 +463,11 @@ func (p *StorageGridProvider) Configure(ctx context.Context, req provider.Config
 
 			tflog.Debug(ctx, "Using temporary access keys for S3 client")
 		} else {
-			// Only S3 endpoint configured - require explicit S3 credentials
-			if accessKey != "" && secretAccessKey != "" {
-				// Use explicit S3 credentials if provided
-				s3AccessKey = accessKey
-				s3SecretKey = secretAccessKey
-				tflog.Debug(ctx, "Using explicit access_key/secret_access_key for S3 client")
-			} else {
-				// Error: S3-only configuration requires explicit S3 credentials
-				resp.Diagnostics.AddError(
-					"Missing S3 Credentials for S3-Only Configuration",
-					"When only the S3 endpoint is configured (without management endpoint), explicit S3 credentials are required. "+
-						"Please provide either:\n"+
-						"1. 'access_key' and 'secret_access_key' in the provider configuration, or\n"+
-						"2. Set STORAGEGRID_ACCESS_KEY and STORAGEGRID_SECRET_ACCESS_KEY environment variables\n\n"+
-						"Username/password cannot be used for S3 authentication - they are for StorageGrid management API only.",
-				)
-				return
-			}
+			// Only S3 endpoint configured - use explicit S3 credentials
+			// (validation already done earlier to ensure these are not empty)
+			s3AccessKey = accessKey
+			s3SecretKey = secretAccessKey
+			tflog.Debug(ctx, "Using explicit access_key/secret_access_key for S3 client")
 		}
 
 		// Create S3 client with appropriate credentials
