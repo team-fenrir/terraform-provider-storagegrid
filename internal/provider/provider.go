@@ -36,10 +36,12 @@ type StorageGridProvider struct {
 
 // StorageGridProviderModel describes the provider data model.
 type StorageGridProviderModel struct {
-	Endpoints *EndpointsModel `tfsdk:"endpoints"`
-	AccountID types.String    `tfsdk:"accountid"`
-	Username  types.String    `tfsdk:"username"`
-	Password  types.String    `tfsdk:"password"`
+	Endpoints       *EndpointsModel `tfsdk:"endpoints"`
+	AccountID       types.String    `tfsdk:"accountid"`
+	Username        types.String    `tfsdk:"username"`
+	Password        types.String    `tfsdk:"password"`
+	AccessKey       types.String    `tfsdk:"access_key"`
+	SecretAccessKey types.String    `tfsdk:"secret_access_key"`
 }
 
 // EndpointsModel describes the endpoints configuration block.
@@ -177,6 +179,15 @@ func (p *StorageGridProvider) Schema(_ context.Context, _ provider.SchemaRequest
 				Optional:    true,
 				Sensitive:   true,
 			},
+			"access_key": schema.StringAttribute{
+				Description: "S3 access key for direct S3 authentication when management endpoint is not configured. May also be provided via STORAGEGRID_ACCESS_KEY environment variable.",
+				Optional:    true,
+			},
+			"secret_access_key": schema.StringAttribute{
+				Description: "S3 secret access key for direct S3 authentication when management endpoint is not configured. May also be provided via STORAGEGRID_SECRET_ACCESS_KEY environment variable.",
+				Optional:    true,
+				Sensitive:   true,
+			},
 		},
 		Blocks: map[string]schema.Block{
 			"endpoints": schema.SingleNestedBlock{
@@ -256,6 +267,24 @@ func (p *StorageGridProvider) Configure(ctx context.Context, req provider.Config
 		)
 	}
 
+	if config.AccessKey.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("access_key"),
+			"Unknown StorageGrid S3 Access Key",
+			"The provider cannot create the StorageGrid S3 client as there is an unknown configuration value for the S3 access key. "+
+				"Either target apply the source of the value first, set the value statically in the configuration, or use the STORAGEGRID_ACCESS_KEY environment variable.",
+		)
+	}
+
+	if config.SecretAccessKey.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("secret_access_key"),
+			"Unknown StorageGrid S3 Secret Access Key",
+			"The provider cannot create the StorageGrid S3 client as there is an unknown configuration value for the S3 secret access key. "+
+				"Either target apply the source of the value first, set the value statically in the configuration, or use the STORAGEGRID_SECRET_ACCESS_KEY environment variable.",
+		)
+	}
+
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -268,6 +297,8 @@ func (p *StorageGridProvider) Configure(ctx context.Context, req provider.Config
 	accountID := os.Getenv("STORAGEGRID_ACCOUNTID")
 	username := os.Getenv("STORAGEGRID_USERNAME")
 	password := os.Getenv("STORAGEGRID_PASSWORD")
+	accessKey := os.Getenv("STORAGEGRID_ACCESS_KEY")
+	secretAccessKey := os.Getenv("STORAGEGRID_SECRET_ACCESS_KEY")
 
 	// Extract endpoints from configuration if provided
 	if config.Endpoints != nil {
@@ -289,6 +320,14 @@ func (p *StorageGridProvider) Configure(ctx context.Context, req provider.Config
 
 	if !config.Password.IsNull() {
 		password = config.Password.ValueString()
+	}
+
+	if !config.AccessKey.IsNull() {
+		accessKey = config.AccessKey.ValueString()
+	}
+
+	if !config.SecretAccessKey.IsNull() {
+		secretAccessKey = config.SecretAccessKey.ValueString()
 	}
 
 	// If any of the expected configurations are missing, return
@@ -408,11 +447,18 @@ func (p *StorageGridProvider) Configure(ctx context.Context, req provider.Config
 
 			tflog.Debug(ctx, "Using temporary access keys for S3 client")
 		} else {
-			// Only S3 endpoint configured - use username/password directly
-			// This assumes the user has configured separate S3 credentials
-			s3AccessKey = username
-			s3SecretKey = password
-			tflog.Debug(ctx, "Using provided username/password for S3 client")
+			// Only S3 endpoint configured - determine which credentials to use
+			if accessKey != "" && secretAccessKey != "" {
+				// Use explicit S3 credentials if provided
+				s3AccessKey = accessKey
+				s3SecretKey = secretAccessKey
+				tflog.Debug(ctx, "Using explicit access_key/secret_access_key for S3 client")
+			} else {
+				// Fallback to username/password for S3 authentication
+				s3AccessKey = username
+				s3SecretKey = password
+				tflog.Debug(ctx, "Using username/password for S3 client (fallback)")
+			}
 		}
 
 		// Create S3 client with appropriate credentials
