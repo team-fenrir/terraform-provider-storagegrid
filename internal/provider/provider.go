@@ -5,7 +5,9 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -48,8 +50,108 @@ type EndpointsModel struct {
 
 // StorageGridClients holds the various API clients for StorageGrid services.
 type StorageGridClients struct {
-	MgmtClient *utils.Client // nil if no management endpoint configured
-	S3Client   *minio.Client // nil if no S3 endpoint configured
+	MgmtClient         *utils.Client // nil if no management endpoint configured
+	S3Client           *minio.Client // nil if no S3 endpoint configured
+	tempAccessKeyID    string        // temporary access key created for S3 operations
+	tempSecretKey      string        // temporary secret key created for S3 operations
+	tempAccessKeyAlias string        // alias of temporary access key for cleanup
+	username           string        // username for access key creation
+}
+
+// createTemporaryAccessKey creates a temporary S3 access key for the configured user
+func (c *StorageGridClients) createTemporaryAccessKey(ctx context.Context) error {
+	if c.MgmtClient == nil {
+		return fmt.Errorf("management client not available for access key creation")
+	}
+
+	// Get the user ID using the management API
+	userUniqueName := "user/" + c.username
+	userResponse, err := c.MgmtClient.GetUser(userUniqueName)
+	if err != nil {
+		return fmt.Errorf("failed to get user info for %s: %w", c.username, err)
+	}
+
+	userID := userResponse.Data.ID
+
+	// Create a temporary access key
+	payload := utils.S3AccessKeyCreatePayload{
+		// No expiry for now - we'll manage cleanup manually
+		Expires: nil,
+	}
+
+	accessKeyResponse, err := c.MgmtClient.CreateS3AccessKey(userID, payload)
+	if err != nil {
+		return fmt.Errorf("failed to create temporary S3 access key: %w", err)
+	}
+
+	// Store the temporary credentials
+	c.tempAccessKeyID = accessKeyResponse.Data.AccessKey
+	c.tempSecretKey = accessKeyResponse.Data.SecretAccessKey
+	c.tempAccessKeyAlias = accessKeyResponse.Data.ID // Use the key ID for deletion
+
+	tflog.Debug(ctx, "Created temporary S3 access key", map[string]interface{}{
+		"user_id":    userID,
+		"access_key": c.tempAccessKeyID,
+	})
+
+	return nil
+}
+
+// cleanupTemporaryAccessKey removes the temporary access key
+func (c *StorageGridClients) cleanupTemporaryAccessKey(ctx context.Context) error {
+	if c.MgmtClient == nil || c.tempAccessKeyAlias == "" {
+		return nil // nothing to clean up
+	}
+
+	// Get the user ID for deletion
+	userUniqueName := "user/" + c.username
+	userResponse, err := c.MgmtClient.GetUser(userUniqueName)
+	if err != nil {
+		tflog.Warn(ctx, "Failed to get user info for cleanup", map[string]interface{}{
+			"username": c.username,
+			"error":    err.Error(),
+		})
+		return nil // Don't fail on cleanup
+	}
+
+	userID := userResponse.Data.ID
+
+	// Delete the temporary access key
+	err = c.MgmtClient.DeleteS3AccessKey(userID, c.tempAccessKeyAlias)
+	if err != nil {
+		tflog.Warn(ctx, "Failed to cleanup temporary access key", map[string]interface{}{
+			"key_id": c.tempAccessKeyAlias,
+			"error":  err.Error(),
+		})
+	} else {
+		tflog.Debug(ctx, "Successfully cleaned up temporary S3 access key", map[string]interface{}{
+			"key_id": c.tempAccessKeyAlias,
+		})
+	}
+
+	// Clear the temporary key info
+	c.tempAccessKeyID = ""
+	c.tempSecretKey = ""
+	c.tempAccessKeyAlias = ""
+
+	return nil
+}
+
+// initCleanup sets up automatic cleanup for temporary access keys
+func (c *StorageGridClients) initCleanup() {
+	if c.tempAccessKeyAlias != "" {
+		// Use a finalizer to ensure cleanup happens when the clients object is garbage collected
+		runtime.SetFinalizer(c, (*StorageGridClients).finalize)
+	}
+}
+
+// finalize is called by the garbage collector to clean up temporary access keys
+func (c *StorageGridClients) finalize() {
+	if c.tempAccessKeyAlias != "" {
+		// Create a background context for cleanup
+		ctx := context.Background()
+		c.cleanupTemporaryAccessKey(ctx)
+	}
 }
 
 func (p *StorageGridProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -244,7 +346,9 @@ func (p *StorageGridProvider) Configure(ctx context.Context, req provider.Config
 	tflog.Debug(ctx, "Creating StorageGrid clients")
 
 	// Create the clients container
-	clients := &StorageGridClients{}
+	clients := &StorageGridClients{
+		username: username, // Store username for access key operations
+	}
 
 	// Create management client if endpoint is provided
 	if mgmtEndpoint != "" {
@@ -267,7 +371,6 @@ func (p *StorageGridProvider) Configure(ctx context.Context, req provider.Config
 	// Create S3 client if endpoint is provided
 	if s3Endpoint != "" {
 		// Parse S3 endpoint to extract hostname and determine security
-		// Remove protocol prefix if present (https:// or http://)
 		endpoint := s3Endpoint
 		secure := true
 
@@ -279,9 +382,42 @@ func (p *StorageGridProvider) Configure(ctx context.Context, req provider.Config
 			secure = false
 		}
 
-		// MinIO client expects credentials for StorageGrid S3 API
+		// Determine credentials to use for S3 client
+		var s3AccessKey, s3SecretKey string
+
+		if clients.MgmtClient != nil {
+			// Both management and S3 endpoints configured - create temporary access keys
+			tflog.Debug(ctx, "Both management and S3 endpoints configured, creating temporary access keys")
+
+			err := clients.createTemporaryAccessKey(ctx)
+			if err != nil {
+				resp.Diagnostics.AddError(
+					"Unable to Create Temporary S3 Access Keys",
+					"Failed to create temporary S3 access keys for S3 client authentication. "+
+						"If the error is not clear, please contact the provider developers.\n\n"+
+						"Temporary Access Key Error: "+err.Error(),
+				)
+				return
+			}
+
+			s3AccessKey = clients.tempAccessKeyID
+			s3SecretKey = clients.tempSecretKey
+
+			// Set up automatic cleanup for the temporary access keys
+			clients.initCleanup()
+
+			tflog.Debug(ctx, "Using temporary access keys for S3 client")
+		} else {
+			// Only S3 endpoint configured - use username/password directly
+			// This assumes the user has configured separate S3 credentials
+			s3AccessKey = username
+			s3SecretKey = password
+			tflog.Debug(ctx, "Using provided username/password for S3 client")
+		}
+
+		// Create S3 client with appropriate credentials
 		s3Client, err := minio.New(endpoint, &minio.Options{
-			Creds:  credentials.NewStaticV4(username, password, ""),
+			Creds:  credentials.NewStaticV4(s3AccessKey, s3SecretKey, ""),
 			Secure: secure,
 		})
 		if err != nil {
