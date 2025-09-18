@@ -29,7 +29,7 @@ func NewAccessKeysResource() resource.Resource {
 
 // AccessKeysResource is the resource implementation for a single S3 access key.
 type AccessKeysResource struct {
-	client *utils.Client
+	mgmtClient *utils.Client
 }
 
 // AccessKeysResourceModel defines the Terraform resource's data model.
@@ -122,15 +122,26 @@ func (r *AccessKeysResource) Configure(_ context.Context, req resource.Configure
 	if req.ProviderData == nil {
 		return
 	}
-	client, ok := req.ProviderData.(*utils.Client)
+	clients, ok := req.ProviderData.(*StorageGridClients)
 	if !ok {
 		resp.Diagnostics.AddError(
-			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected *utils.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected *StorageGridClients, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 		return
 	}
-	r.client = client
+
+	// Validate that management client is available for access key operations
+	if clients.MgmtClient == nil {
+		resp.Diagnostics.AddError(
+			"Management API Client Not Configured",
+			"The access_keys resource requires a StorageGrid Management API endpoint to be configured. "+
+				"Please configure the 'mgmt' endpoint in the provider's endpoints block or set the STORAGEGRID_MGMT_ENDPOINT environment variable.",
+		)
+		return
+	}
+
+	r.mgmtClient = clients.MgmtClient
 }
 
 func (r *AccessKeysResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -143,7 +154,7 @@ func (r *AccessKeysResource) Create(ctx context.Context, req resource.CreateRequ
 
 	// Step 1: Get the User ID from the provided User Name.
 	userName := plan.UserName.ValueString()
-	apiUser, err := r.client.GetUser("user/" + userName)
+	apiUser, err := r.mgmtClient.GetUser("user/" + userName)
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
 			resp.Diagnostics.AddError("User Not Found", fmt.Sprintf("Could not find user with name: '%s'", userName))
@@ -161,7 +172,7 @@ func (r *AccessKeysResource) Create(ctx context.Context, req resource.CreateRequ
 		payload.Expires = &expires
 	}
 
-	createdKey, err := r.client.CreateS3AccessKey(userID, payload)
+	createdKey, err := r.mgmtClient.CreateS3AccessKey(userID, payload)
 	if err != nil {
 		resp.Diagnostics.AddError("Error Creating S3 Access Key", "Could not create S3 access key: "+err.Error())
 		return
@@ -202,7 +213,7 @@ func (r *AccessKeysResource) Read(ctx context.Context, req resource.ReadRequest,
 		// This can happen if the resource was imported without the user_id being resolved.
 		// We can attempt to resolve it now.
 		userName := state.UserName.ValueString()
-		apiUser, err := r.client.GetUser("user/" + userName)
+		apiUser, err := r.mgmtClient.GetUser("user/" + userName)
 		if err != nil {
 			resp.Diagnostics.AddWarning("User Not Found on Read", fmt.Sprintf("Cannot find user '%s' to refresh access key state. If the user was deleted, the key is also gone.", userName))
 			resp.State.RemoveResource(ctx)
@@ -212,7 +223,7 @@ func (r *AccessKeysResource) Read(ctx context.Context, req resource.ReadRequest,
 		state.UserID = types.StringValue(userID)
 	}
 
-	apiKeys, err := r.client.GetS3AccessKeys(userID)
+	apiKeys, err := r.mgmtClient.GetS3AccessKeys(userID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			resp.State.RemoveResource(ctx)
@@ -261,7 +272,7 @@ func (r *AccessKeysResource) Delete(ctx context.Context, req resource.DeleteRequ
 	}
 
 	// Delete uses the UserID and KeyID stored in the state.
-	err := r.client.DeleteS3AccessKey(state.UserID.ValueString(), state.ID.ValueString())
+	err := r.mgmtClient.DeleteS3AccessKey(state.UserID.ValueString(), state.ID.ValueString())
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
 			return // Already gone, successful deletion.

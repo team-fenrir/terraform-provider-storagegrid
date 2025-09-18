@@ -26,7 +26,7 @@ func NewUserDataSource() datasource.DataSource {
 
 // UserDataSource defines the data source implementation.
 type UserDataSource struct {
-	client *utils.Client
+	mgmtClient *utils.Client
 }
 
 // UserDataSourceModel maps the user data to the Terraform schema.
@@ -121,15 +121,26 @@ func (d *UserDataSource) Configure(_ context.Context, req datasource.ConfigureRe
 	if req.ProviderData == nil {
 		return
 	}
-	client, ok := req.ProviderData.(*utils.Client)
+	clients, ok := req.ProviderData.(*StorageGridClients)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected *utils.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected *StorageGridClients, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 		return
 	}
-	d.client = client
+
+	// Validate that management client is available for user data source operations
+	if clients.MgmtClient == nil {
+		resp.Diagnostics.AddError(
+			"Management API Client Not Configured",
+			"The user data source requires a StorageGrid Management API endpoint to be configured. "+
+				"Please configure the 'mgmt' endpoint in the provider's endpoints block or set the STORAGEGRID_MGMT_ENDPOINT environment variable.",
+		)
+		return
+	}
+
+	d.mgmtClient = clients.MgmtClient
 }
 
 // Read fetches the user data from the API and sets the Terraform state.
@@ -142,7 +153,7 @@ func (d *UserDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 	}
 
 	userName := "user/" + state.UserName.ValueString()
-	apiResponse, err := d.client.GetUser(userName)
+	apiResponse, err := d.mgmtClient.GetUser(userName)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			fmt.Sprintf("Unable to Read User %s", userName),

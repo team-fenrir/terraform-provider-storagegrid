@@ -32,7 +32,7 @@ func NewUserResource() resource.Resource {
 
 // UserResource defines the resource implementation.
 type UserResource struct {
-	client *utils.Client
+	mgmtClient *utils.Client
 }
 
 // UserResourceModel maps the resource schema data.
@@ -108,20 +108,31 @@ func (r *UserResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 	}
 }
 
-// Configure adds the provider configured client to the resource.
+// Configure adds the provider configured clients to the resource.
 func (r *UserResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
-	client, ok := req.ProviderData.(*utils.Client)
+	clients, ok := req.ProviderData.(*StorageGridClients)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *utils.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected *StorageGridClients, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 		return
 	}
-	r.client = client
+
+	// Validate that management client is available for user operations
+	if clients.MgmtClient == nil {
+		resp.Diagnostics.AddError(
+			"Management API Client Not Configured",
+			"The user resource requires a StorageGrid Management API endpoint to be configured. "+
+				"Please configure the 'mgmt' endpoint in the provider's endpoints block or set the STORAGEGRID_MGMT_ENDPOINT environment variable.",
+		)
+		return
+	}
+
+	r.mgmtClient = clients.MgmtClient
 }
 
 // Create creates the user resource and sets the initial state.
@@ -142,7 +153,7 @@ func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, r
 			return
 		}
 		for _, groupName := range groupNames {
-			apiGroup, err := r.client.GetGroup("group/" + groupName)
+			apiGroup, err := r.mgmtClient.GetGroup("group/" + groupName)
 			if err != nil {
 				resp.Diagnostics.AddError("Error Finding Group", fmt.Sprintf("Could not find group '%s' to add user to: %s", groupName, err.Error()))
 				return
@@ -163,7 +174,7 @@ func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, r
 		Disable:    plan.Disable.ValueBool(),
 	}
 
-	createdUser, err := r.client.CreateUser(payload)
+	createdUser, err := r.mgmtClient.CreateUser(payload)
 	if err != nil {
 		resp.Diagnostics.AddError("Error Creating User", "Could not create user, unexpected error: "+err.Error())
 		return
@@ -190,7 +201,7 @@ func (r *UserResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 		return
 	}
 
-	apiUser, err := r.client.GetUser(state.ID.ValueString())
+	apiUser, err := r.mgmtClient.GetUser(state.ID.ValueString())
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
 			resp.State.RemoveResource(ctx)
@@ -204,7 +215,7 @@ func (r *UserResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 
 	var groupNames []string
 	for _, groupID := range userData.MemberOf {
-		group, err := r.client.GetGroup(groupID)
+		group, err := r.mgmtClient.GetGroup(groupID)
 		if err != nil {
 			resp.Diagnostics.AddWarning("Could Not Read Member Group", fmt.Sprintf("User is a member of group with ID %s, but it could not be fetched: %s", groupID, err.Error()))
 			continue
@@ -246,7 +257,7 @@ func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, r
 			return
 		}
 		for _, groupName := range groupNames {
-			apiGroup, err := r.client.GetGroup("group/" + groupName)
+			apiGroup, err := r.mgmtClient.GetGroup("group/" + groupName)
 			if err != nil {
 				resp.Diagnostics.AddError("Error Finding Group", fmt.Sprintf("Could not find group '%s' to add user to: %s", groupName, err.Error()))
 				return
@@ -269,13 +280,13 @@ func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		Disable:    plan.Disable.ValueBool(),
 	}
 
-	_, err := r.client.UpdateUser(id, payload)
+	_, err := r.mgmtClient.UpdateUser(id, payload)
 	if err != nil {
 		resp.Diagnostics.AddError("Error Updating User", fmt.Sprintf("Could not update user with ID %s: %s", id, err.Error()))
 		return
 	}
 
-	apiUser, err := r.client.GetUser(id)
+	apiUser, err := r.mgmtClient.GetUser(id)
 	if err != nil {
 		resp.Diagnostics.AddError("Error Re-reading User After Update", fmt.Sprintf("Could not read user with ID %s after update: %s", id, err.Error()))
 		return
@@ -285,7 +296,7 @@ func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, r
 
 	var finalGroupNames []string
 	for _, groupID := range userData.MemberOf {
-		group, err := r.client.GetGroup(groupID)
+		group, err := r.mgmtClient.GetGroup(groupID)
 		if err != nil {
 			resp.Diagnostics.AddWarning("Could Not Read Member Group", fmt.Sprintf("User is a member of group with ID %s, but it could not be fetched: %s", groupID, err.Error()))
 			continue
@@ -318,7 +329,7 @@ func (r *UserResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 		return
 	}
 
-	err := r.client.DeleteUser(state.ID.ValueString())
+	err := r.mgmtClient.DeleteUser(state.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Error Deleting User", fmt.Sprintf("Could not delete user with ID %s: %s", state.ID.ValueString(), err.Error()))
 		return
@@ -329,7 +340,7 @@ func (r *UserResource) ImportState(ctx context.Context, req resource.ImportState
 	userName := req.ID
 	apiUniqueName := "user/" + userName
 
-	apiUser, err := r.client.GetUser(apiUniqueName)
+	apiUser, err := r.mgmtClient.GetUser(apiUniqueName)
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
 			resp.Diagnostics.AddError(
@@ -351,7 +362,7 @@ func (r *UserResource) ImportState(ctx context.Context, req resource.ImportState
 	// The API returns group IDs. We must convert them to group names for the state.
 	var groupNames []string
 	for _, groupID := range userData.MemberOf {
-		group, err := r.client.GetGroup(groupID)
+		group, err := r.mgmtClient.GetGroup(groupID)
 		if err != nil {
 			resp.Diagnostics.AddWarning("Could Not Read Member Group on Import", fmt.Sprintf("User is a member of group with ID %s, but it could not be fetched: %s", groupID, err.Error()))
 			continue

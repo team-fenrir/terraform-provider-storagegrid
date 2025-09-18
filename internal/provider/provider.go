@@ -43,6 +43,12 @@ type EndpointsModel struct {
 	S3   types.String `tfsdk:"s3"`
 }
 
+// StorageGridClients holds the various API clients for StorageGrid services.
+type StorageGridClients struct {
+	MgmtClient *utils.Client // nil if no management endpoint configured
+	// S3Client will be added in future when implementing S3 resources
+}
+
 func (p *StorageGridProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
 	resp.TypeName = "storagegrid"
 	resp.Version = p.version
@@ -232,32 +238,38 @@ func (p *StorageGridProvider) Configure(ctx context.Context, req provider.Config
 	ctx = tflog.SetField(ctx, "storagegrid_account_id", accountID)
 	ctx = tflog.SetField(ctx, "storagegrid_username", username)
 
-	tflog.Debug(ctx, "Creating StorageGrid client")
-	// For backward compatibility, use management endpoint for the existing client
-	// If only S3 endpoint is provided, we'll handle that in future S3 client creation
-	var clientEndpoint string
+	tflog.Debug(ctx, "Creating StorageGrid clients")
+
+	// Create the clients container
+	clients := &StorageGridClients{}
+
+	// Create management client if endpoint is provided
 	if mgmtEndpoint != "" {
-		clientEndpoint = mgmtEndpoint
+		mgmtClient, err := utils.NewClient(&mgmtEndpoint, &accountID, &username, &password)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Unable to Create StorageGrid Management API Client",
+				"An unexpected error occurred when creating the StorageGrid Management API client. "+
+					"If the error is not clear, please contact the provider developers.\n\n"+
+					"StorageGrid Management Client Error: "+err.Error(),
+			)
+			return
+		}
+		clients.MgmtClient = mgmtClient
+		tflog.Debug(ctx, "Successfully created StorageGrid Management client")
 	} else {
-		// If only S3 endpoint is provided, we'll use it for now but this will be
-		// restructured when we add dedicated S3 client support
-		clientEndpoint = s3Endpoint
-	}
-	client, err := utils.NewClient(&clientEndpoint, &accountID, &username, &password)
-	if err != nil {
-		resp.Diagnostics.AddError(
-			"Unable to Create StorageGrid API Client",
-			"An unexpected error occurred when creating the StorageGrid API client. "+
-				"If the error is not clear, please contact the provider developers.\n\n"+
-				"StorageGrid Client Error: "+err.Error(),
-		)
-		return
+		tflog.Debug(ctx, "No management endpoint provided, skipping management client creation")
 	}
 
-	// Make the StorageGrid client available during DataSource and Resource
+	// TODO: Create S3 client when S3 endpoint is provided
+	if s3Endpoint != "" {
+		tflog.Debug(ctx, "S3 endpoint provided but S3 client not yet implemented")
+	}
+
+	// Make the StorageGrid clients available during DataSource and Resource
 	// type Configure methods.
-	resp.DataSourceData = client
-	resp.ResourceData = client
+	resp.DataSourceData = clients
+	resp.ResourceData = clients
 
 	tflog.Info(ctx, "Configured StorageGrid client", map[string]any{"success": true})
 }

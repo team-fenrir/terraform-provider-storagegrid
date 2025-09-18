@@ -80,7 +80,7 @@ func NewGroupResource() resource.Resource {
 }
 
 type GroupResource struct {
-	client *utils.Client
+	mgmtClient *utils.Client
 }
 
 type GroupResourceModel struct {
@@ -240,15 +240,26 @@ func (r *GroupResource) Configure(_ context.Context, req resource.ConfigureReque
 	if req.ProviderData == nil {
 		return
 	}
-	client, ok := req.ProviderData.(*utils.Client)
+	clients, ok := req.ProviderData.(*StorageGridClients)
 	if !ok {
 		resp.Diagnostics.AddError(
-			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected *utils.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected *StorageGridClients, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 		return
 	}
-	r.client = client
+
+	// Validate that management client is available for group operations
+	if clients.MgmtClient == nil {
+		resp.Diagnostics.AddError(
+			"Management API Client Not Configured",
+			"The group resource requires a StorageGrid Management API endpoint to be configured. "+
+				"Please configure the 'mgmt' endpoint in the provider's endpoints block or set the STORAGEGRID_MGMT_ENDPOINT environment variable.",
+		)
+		return
+	}
+
+	r.mgmtClient = clients.MgmtClient
 }
 
 func (r *GroupResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -287,7 +298,7 @@ func (r *GroupResource) Create(ctx context.Context, req resource.CreateRequest, 
 		},
 	}
 
-	createdGroup, err := r.client.CreateGroup(apiRequest)
+	createdGroup, err := r.mgmtClient.CreateGroup(apiRequest)
 	if err != nil {
 		resp.Diagnostics.AddError(fmt.Sprintf("Error creating StorageGrid Group: %s", groupName), "Could not create group, unexpected error: "+err.Error())
 		return
@@ -319,7 +330,7 @@ func (r *GroupResource) Read(ctx context.Context, req resource.ReadRequest, resp
 
 	groupNameFromState := state.ID.ValueString()
 	id := state.ID.ValueString()
-	apiGroup, err := r.client.GetGroup(id)
+	apiGroup, err := r.mgmtClient.GetGroup(id)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			resp.State.RemoveResource(ctx)
@@ -410,7 +421,7 @@ func (r *GroupResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		},
 	}
 	id := plan.ID.ValueString()
-	_, err := r.client.UpdateGroup(id, apiRequest)
+	_, err := r.mgmtClient.UpdateGroup(id, apiRequest)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Updating StorageGrid Group",
@@ -419,7 +430,7 @@ func (r *GroupResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		return
 	}
 
-	updatedGroup, err := r.client.GetGroup(id)
+	updatedGroup, err := r.mgmtClient.GetGroup(id)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Reading StorageGrid Group",
@@ -459,7 +470,7 @@ func (r *GroupResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 	}
 
 	id := state.ID.ValueString()
-	err := r.client.DeleteGroup(id)
+	err := r.mgmtClient.DeleteGroup(id)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting StorageGrid Group",
@@ -475,7 +486,7 @@ func (r *GroupResource) ImportState(ctx context.Context, req resource.ImportStat
 	// The API expects the unique name to be prefixed with "group/".
 	apiUniqueName := "group/" + groupName
 
-	apiGroup, err := r.client.GetGroup(apiUniqueName)
+	apiGroup, err := r.mgmtClient.GetGroup(apiUniqueName)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			resp.Diagnostics.AddError(

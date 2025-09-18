@@ -25,7 +25,7 @@ func NewGroupDataSource() datasource.DataSource {
 
 // GroupDataSource defines the data source implementation.
 type GroupDataSource struct {
-	client *utils.Client
+	mgmtClient *utils.Client
 }
 
 type GroupDataSourceModel struct {
@@ -205,15 +205,26 @@ func (d *GroupDataSource) Configure(_ context.Context, req datasource.ConfigureR
 	if req.ProviderData == nil {
 		return
 	}
-	client, ok := req.ProviderData.(*utils.Client)
+	clients, ok := req.ProviderData.(*StorageGridClients)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected *utils.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected *StorageGridClients, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 		return
 	}
-	d.client = client
+
+	// Validate that management client is available for group data source operations
+	if clients.MgmtClient == nil {
+		resp.Diagnostics.AddError(
+			"Management API Client Not Configured",
+			"The group data source requires a StorageGrid Management API endpoint to be configured. "+
+				"Please configure the 'mgmt' endpoint in the provider's endpoints block or set the STORAGEGRID_MGMT_ENDPOINT environment variable.",
+		)
+		return
+	}
+
+	d.mgmtClient = clients.MgmtClient
 }
 
 func (d *GroupDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
@@ -225,7 +236,7 @@ func (d *GroupDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 	}
 
 	groupName := "group/" + state.GroupName.ValueString()
-	apiResponse, err := d.client.GetGroup(groupName)
+	apiResponse, err := d.mgmtClient.GetGroup(groupName)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			fmt.Sprintf("Unable to Read Group %s", groupName),
