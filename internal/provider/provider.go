@@ -447,17 +447,23 @@ func (p *StorageGridProvider) Configure(ctx context.Context, req provider.Config
 
 			tflog.Debug(ctx, "Using temporary access keys for S3 client")
 		} else {
-			// Only S3 endpoint configured - determine which credentials to use
+			// Only S3 endpoint configured - require explicit S3 credentials
 			if accessKey != "" && secretAccessKey != "" {
 				// Use explicit S3 credentials if provided
 				s3AccessKey = accessKey
 				s3SecretKey = secretAccessKey
 				tflog.Debug(ctx, "Using explicit access_key/secret_access_key for S3 client")
 			} else {
-				// Fallback to username/password for S3 authentication
-				s3AccessKey = username
-				s3SecretKey = password
-				tflog.Debug(ctx, "Using username/password for S3 client (fallback)")
+				// Error: S3-only configuration requires explicit S3 credentials
+				resp.Diagnostics.AddError(
+					"Missing S3 Credentials for S3-Only Configuration",
+					"When only the S3 endpoint is configured (without management endpoint), explicit S3 credentials are required. "+
+						"Please provide either:\n"+
+						"1. 'access_key' and 'secret_access_key' in the provider configuration, or\n"+
+						"2. Set STORAGEGRID_ACCESS_KEY and STORAGEGRID_SECRET_ACCESS_KEY environment variables\n\n"+
+						"Username/password cannot be used for S3 authentication - they are for StorageGrid management API only.",
+				)
+				return
 			}
 		}
 
