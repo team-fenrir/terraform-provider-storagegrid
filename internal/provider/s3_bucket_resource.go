@@ -20,6 +20,65 @@ import (
 	"github.com/minio/minio-go/v7"
 )
 
+// bucketNameValidator validates S3 bucket naming rules that can't be expressed with regex
+type bucketNameValidator struct{}
+
+func (v bucketNameValidator) Description(ctx context.Context) string {
+	return "Bucket name must follow S3 naming rules"
+}
+
+func (v bucketNameValidator) MarkdownDescription(ctx context.Context) string {
+	return "Bucket name must follow S3 naming rules"
+}
+
+func (v bucketNameValidator) ValidateString(ctx context.Context, req validator.StringRequest, resp *validator.StringResponse) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+
+	value := req.ConfigValue.ValueString()
+
+	// Cannot contain consecutive hyphens
+	if strings.Contains(value, "--") {
+		resp.Diagnostics.AddAttributeError(
+			req.Path,
+			"Invalid bucket name",
+			"Bucket name cannot contain consecutive hyphens (--)",
+		)
+		return
+	}
+
+	// Cannot start with 'xn--' (internationalized domain names)
+	if strings.HasPrefix(value, "xn--") {
+		resp.Diagnostics.AddAttributeError(
+			req.Path,
+			"Invalid bucket name",
+			"Bucket name cannot start with 'xn--' (reserved for internationalized domain names)",
+		)
+		return
+	}
+
+	// Cannot end with '-s3alias' (reserved)
+	if strings.HasSuffix(value, "-s3alias") {
+		resp.Diagnostics.AddAttributeError(
+			req.Path,
+			"Invalid bucket name",
+			"Bucket name cannot end with '-s3alias' (reserved suffix)",
+		)
+		return
+	}
+
+	// Cannot be formatted as an IP address (basic check for 4 dot-separated numbers)
+	if matched, _ := regexp.MatchString(`^\d+\.\d+\.\d+\.\d+$`, value); matched {
+		resp.Diagnostics.AddAttributeError(
+			req.Path,
+			"Invalid bucket name",
+			"Bucket name cannot be formatted as an IP address",
+		)
+		return
+	}
+}
+
 // Ensure provider defined types fully satisfy framework interfaces.
 var (
 	_ resource.Resource                = &S3BucketResource{}
@@ -64,17 +123,10 @@ func (r *S3BucketResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 						"Bucket name must start and end with a lowercase letter or number, and can only contain lowercase letters, numbers, and hyphens",
 					),
 					stringvalidator.RegexMatches(
-						regexp.MustCompile(`^(?!.*--)`),
-						"Bucket name cannot contain consecutive hyphens",
-					),
-					stringvalidator.RegexMatches(
-						regexp.MustCompile(`^(?!xn--)`),
-						"Bucket name cannot start with 'xn--'",
-					),
-					stringvalidator.RegexMatches(
-						regexp.MustCompile(`^(?!.*\.$)`),
+						regexp.MustCompile(`^[^.]*[^.]$`),
 						"Bucket name cannot end with a period",
 					),
+					bucketNameValidator{},
 				},
 			},
 			"object_lock_enabled": schema.BoolAttribute{
