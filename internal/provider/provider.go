@@ -318,6 +318,7 @@ func (p *StorageGridProvider) DataSources(ctx context.Context) []func() datasour
 	return []func() datasource.DataSource{
 		NewGroupDataSource,
 		NewUserDataSource,
+		NewS3BucketDataSource,
 	}
 }
 
