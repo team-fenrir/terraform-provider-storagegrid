@@ -31,7 +31,7 @@ type StorageGridProvider struct {
 
 // StorageGridProviderModel describes the provider data model.
 type StorageGridProviderModel struct {
-	Endpoint  types.String `tfsdk:"endpoint"`
+	Endpoints types.Map    `tfsdk:"endpoints"`
 	AccountID types.String `tfsdk:"accountid"`
 	Username  types.String `tfsdk:"username"`
 	Password  types.String `tfsdk:"password"`
@@ -45,10 +45,11 @@ func (p *StorageGridProvider) Metadata(ctx context.Context, req provider.Metadat
 // Schema defines the provider-level schema for configuration data.
 func (p *StorageGridProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "The StorageGrid provider enables Terraform management of StorageGrid IAM resources including users, groups, and access keys. This provider requires StorageGrid with v4 API support and is not compatible with older StorageGrid versions that only support v3 or earlier APIs.",
+		Description: "The StorageGrid provider enables Terraform management of StorageGrid IAM and S3 resources including users, groups, access keys, buckets, and bucket configurations. This provider requires StorageGrid with v4 API support and is not compatible with older StorageGrid versions that only support v3 or earlier APIs.",
 		Attributes: map[string]schema.Attribute{
-			"endpoint": schema.StringAttribute{
-				Description: "URI for StorageGrid API. May also be provided via STORAGEGRID_ENDPOINT environment variable.",
+			"endpoints": schema.MapAttribute{
+				Description: "Map of service endpoints for StorageGrid APIs. Should contain 'iam' and 's3' keys with their respective endpoint URIs. May also be provided via STORAGEGRID_IAM_ENDPOINT and STORAGEGRID_S3_ENDPOINT environment variables.",
+				ElementType: types.StringType,
 				Optional:    true,
 			},
 			"accountid": schema.StringAttribute{
@@ -81,12 +82,12 @@ func (p *StorageGridProvider) Configure(ctx context.Context, req provider.Config
 	// If practitioner provided a configuration value for any of the
 	// attributes, it must be a known value.
 
-	if config.Endpoint.IsUnknown() {
+	if config.Endpoints.IsUnknown() {
 		resp.Diagnostics.AddAttributeError(
-			path.Root("endpoint"),
-			"Unknown StorageGrid API Endpoint",
-			"The provider cannot create the StorageGrid API client as there is an unknown configuration value for the StorageGrid API endpoint. "+
-				"Either target apply the source of the value first, set the value statically in the configuration, or use the STORAGEGRID_ENDPOINT environment variable.",
+			path.Root("endpoints"),
+			"Unknown StorageGrid API Endpoints",
+			"The provider cannot create the StorageGrid API client as there is an unknown configuration value for the StorageGrid API endpoints. "+
+				"Either target apply the source of the value first, set the value statically in the configuration, or use the STORAGEGRID_IAM_ENDPOINT and STORAGEGRID_S3_ENDPOINT environment variables.",
 		)
 	}
 
@@ -124,13 +125,27 @@ func (p *StorageGridProvider) Configure(ctx context.Context, req provider.Config
 	// Default values to environment variables, but override
 	// with Terraform configuration value if set.
 	// CHOICE: this means that ENV vars overwrite what's in the TF object!
-	endpoint := os.Getenv("STORAGEGRID_ENDPOINT")
+	iamEndpoint := os.Getenv("STORAGEGRID_IAM_ENDPOINT")
+	s3Endpoint := os.Getenv("STORAGEGRID_S3_ENDPOINT")
 	accountID := os.Getenv("STORAGEGRID_ACCOUNTID")
 	username := os.Getenv("STORAGEGRID_USERNAME")
 	password := os.Getenv("STORAGEGRID_PASSWORD")
 
-	if !config.Endpoint.IsNull() {
-		endpoint = config.Endpoint.ValueString()
+	// Extract endpoints from configuration if provided
+	if !config.Endpoints.IsNull() {
+		endpointsMap := make(map[string]string)
+		diags := config.Endpoints.ElementsAs(ctx, &endpointsMap, false)
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+
+		if iam, exists := endpointsMap["iam"]; exists {
+			iamEndpoint = iam
+		}
+		if s3, exists := endpointsMap["s3"]; exists {
+			s3Endpoint = s3
+		}
 	}
 
 	if !config.AccountID.IsNull() {
@@ -148,13 +163,13 @@ func (p *StorageGridProvider) Configure(ctx context.Context, req provider.Config
 	// If any of the expected configurations are missing, return
 	// errors with provider-specific guidance.
 
-	if endpoint == "" {
+	if iamEndpoint == "" && s3Endpoint == "" {
 		resp.Diagnostics.AddAttributeError(
-			path.Root("endpoint"),
-			"Missing StorageGrid API Endpoint",
-			"The provider cannot create the StorageGrid API client as there is a missing or empty value for the StorageGrid API endpoint. "+
-				"Set the endpoint value in the configuration or use the STORAGEGRID_ENDPOINT environment variable. "+
-				"If either is already set, ensure the value is not empty.",
+			path.Root("endpoints"),
+			"Missing StorageGrid API Endpoints",
+			"The provider cannot create the StorageGrid API client as there are no endpoints configured. "+
+				"At least one of 'iam' or 's3' endpoints must be provided in the endpoints configuration map or via "+
+				"STORAGEGRID_IAM_ENDPOINT and/or STORAGEGRID_S3_ENDPOINT environment variables.",
 		)
 	}
 
@@ -192,12 +207,23 @@ func (p *StorageGridProvider) Configure(ctx context.Context, req provider.Config
 		return
 	}
 
-	ctx = tflog.SetField(ctx, "storagegrid_endpoint", endpoint)
+	ctx = tflog.SetField(ctx, "storagegrid_iam_endpoint", iamEndpoint)
+	ctx = tflog.SetField(ctx, "storagegrid_s3_endpoint", s3Endpoint)
 	ctx = tflog.SetField(ctx, "storagegrid_account_id", accountID)
 	ctx = tflog.SetField(ctx, "storagegrid_username", username)
 
 	tflog.Debug(ctx, "Creating StorageGrid client")
-	client, err := utils.NewClient(&endpoint, &accountID, &username, &password)
+	// For backward compatibility, use IAM endpoint for the existing client
+	// If only S3 endpoint is provided, we'll handle that in future S3 client creation
+	var clientEndpoint string
+	if iamEndpoint != "" {
+		clientEndpoint = iamEndpoint
+	} else {
+		// If only S3 endpoint is provided, we'll use it for now but this will be
+		// restructured when we add dedicated S3 client support
+		clientEndpoint = s3Endpoint
+	}
+	client, err := utils.NewClient(&clientEndpoint, &accountID, &username, &password)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Create StorageGrid API Client",
