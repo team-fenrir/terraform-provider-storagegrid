@@ -60,7 +60,7 @@ func (r *S3BucketVersioningResource) Schema(ctx context.Context, req resource.Sc
 				Description: "Whether versioning is enabled for the bucket.",
 				Optional:    true,
 				Computed:    true,
-				Default:     booldefault.StaticBool(false),
+				Default:     booldefault.StaticBool(true),
 			},
 			"versioning_suspended": schema.BoolAttribute{
 				Description: "Whether versioning is suspended for the bucket.",
