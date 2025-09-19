@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -51,8 +52,39 @@ type S3ObjectLockConfig struct {
 // DefaultRetentionSetting represents default retention settings for object lock
 type DefaultRetentionSetting struct {
 	Mode  string `json:"mode"`
-	Days  int    `json:"days,omitempty"`
-	Years int    `json:"years,omitempty"`
+	Days  int    `json:"-"`
+	Years int    `json:"-"`
+	DaysStr  string `json:"days,omitempty"`
+	YearsStr string `json:"years,omitempty"`
+}
+
+// UnmarshalJSON handles conversion of string days/years to integers
+func (d *DefaultRetentionSetting) UnmarshalJSON(data []byte) error {
+	type Alias DefaultRetentionSetting
+	aux := &struct {
+		*Alias
+	}{
+		Alias: (*Alias)(d),
+	}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	// Convert string values to integers
+	if d.DaysStr != "" {
+		if days, err := strconv.Atoi(d.DaysStr); err == nil {
+			d.Days = days
+		}
+	}
+
+	if d.YearsStr != "" {
+		if years, err := strconv.Atoi(d.YearsStr); err == nil {
+			d.Years = years
+		}
+	}
+
+	return nil
 }
 
 // DeleteObjectStatusConfig represents delete status for the bucket
