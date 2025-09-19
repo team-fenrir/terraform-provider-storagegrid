@@ -52,7 +52,7 @@ type AuthResponse struct {
 func NewClient(endpoint, accountID, username, password *string) (*Client, error) {
 	c := Client{
 		EndpointURL: *endpoint,
-		HTTPClient:  &http.Client{Timeout: 10 * time.Second},
+		HTTPClient:  &http.Client{Timeout: 60 * time.Second}, // Increased timeout for bucket operations
 	}
 
 	// If endpoint is not provided, return the client without authenticating.

@@ -5,10 +5,13 @@ package utils
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -221,6 +224,23 @@ func (c *Client) DeleteS3Bucket(bucketName string) error {
 
 	_, err = c.doRequest(req)
 	if err != nil {
+		// Check if this is a timeout error
+		if isTimeoutError(err) {
+			log.Printf("Delete request timed out, checking if bucket was actually deleted...")
+
+			// Wait a moment for the operation to complete
+			time.Sleep(2 * time.Second)
+
+			// Check if bucket still exists
+			_, checkErr := c.GetS3Bucket(bucketName)
+			if checkErr != nil && strings.Contains(checkErr.Error(), "not found") {
+				// Bucket was successfully deleted despite timeout
+				log.Printf("Bucket %s was successfully deleted despite timeout", bucketName)
+				c.bucketCache = nil
+				c.bucketCacheTime = time.Time{}
+				return nil
+			}
+		}
 		return fmt.Errorf("error executing DELETE request: %w", err)
 	}
 
@@ -229,6 +249,29 @@ func (c *Client) DeleteS3Bucket(bucketName string) error {
 	c.bucketCacheTime = time.Time{}
 
 	return nil
+}
+
+// isTimeoutError checks if an error is a timeout error
+func isTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check for context deadline exceeded
+	if err == context.DeadlineExceeded {
+		return true
+	}
+
+	// Check for net timeout errors
+	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+		return true
+	}
+
+	// Check for timeout in error message
+	errStr := err.Error()
+	return strings.Contains(errStr, "timeout") ||
+		   strings.Contains(errStr, "deadline exceeded") ||
+		   strings.Contains(errStr, "Client.Timeout exceeded")
 }
 
 // GetS3Bucket retrieves information about a specific S3 bucket by name.
