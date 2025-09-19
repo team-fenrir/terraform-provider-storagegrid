@@ -172,10 +172,14 @@ func (r *S3BucketResource) Read(ctx context.Context, req resource.ReadRequest, r
 }
 
 func (r *S3BucketResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	// Since name and region require replacement, this should not be called
+	// Since StorageGrid doesn't support PUT operations for bucket updates,
+	// all attribute changes require replacement (destroy/create cycle).
+	// This method should never be called due to RequiresReplace plan modifiers.
 	resp.Diagnostics.AddError(
-		"Unexpected Update Call",
-		"All attributes of this resource require replacement and should trigger a destroy/create instead of update.",
+		"Update Not Supported",
+		"StorageGrid S3 buckets do not support in-place updates. All attribute changes "+
+			"(name, region, object_lock_enabled) require replacement and should trigger a "+
+			"destroy/create cycle instead of an update.",
 	)
 }
 
@@ -189,9 +193,14 @@ func (r *S3BucketResource) Delete(ctx context.Context, req resource.DeleteReques
 
 	bucketName := state.Name.ValueString()
 
-	// TODO: Implement delete functionality when the API endpoint is available
-	resp.Diagnostics.AddError(
-		"Delete Not Implemented",
-		fmt.Sprintf("Delete operation for S3 bucket %s is not yet implemented. Please delete the bucket manually.", bucketName),
-	)
+	err := r.client.DeleteS3Bucket(bucketName)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			fmt.Sprintf("Unable to Delete S3 Bucket %s", bucketName),
+			err.Error(),
+		)
+		return
+	}
+
+	// State is automatically cleared on successful delete
 }

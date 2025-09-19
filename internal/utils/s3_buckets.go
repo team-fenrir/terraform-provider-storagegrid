@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 )
@@ -104,14 +105,14 @@ func (c *Client) getCachedBucketList() ([]S3BucketData, error) {
 
 // S3BucketCreateRequest represents the request body for creating an S3 bucket
 type S3BucketCreateRequest struct {
-	Name         string                        `json:"name"`
-	Region       string                        `json:"region"`
-	S3ObjectLock *S3BucketCreateObjectLock     `json:"s3ObjectLock,omitempty"`
+	Name         string                    `json:"name"`
+	Region       string                    `json:"region"`
+	S3ObjectLock *S3BucketCreateObjectLock `json:"s3ObjectLock,omitempty"`
 }
 
 // S3BucketCreateObjectLock represents object lock settings for bucket creation
 type S3BucketCreateObjectLock struct {
-	Enabled               bool                              `json:"enabled"`
+	Enabled                 bool                            `json:"enabled"`
 	DefaultRetentionSetting *S3BucketCreateRetentionSetting `json:"defaultRetentionSetting,omitempty"`
 }
 
@@ -123,11 +124,11 @@ type S3BucketCreateRetentionSetting struct {
 
 // S3BucketCreateResponse represents the API response structure for bucket creation
 type S3BucketCreateResponse struct {
-	ResponseTime string                 `json:"responseTime"`
-	Status       string                 `json:"status"`
-	APIVersion   string                 `json:"apiVersion"`
-	Deprecated   bool                   `json:"deprecated"`
-	Data         S3BucketCreateData     `json:"data"`
+	ResponseTime string                  `json:"responseTime"`
+	Status       string                  `json:"status"`
+	APIVersion   string                  `json:"apiVersion"`
+	Deprecated   bool                    `json:"deprecated"`
+	Data         S3BucketCreateData      `json:"data"`
 	Metadata     *S3BucketCreateMetadata `json:"metadata,omitempty"`
 }
 
@@ -153,6 +154,7 @@ type S3BucketAlert struct {
 // CreateS3Bucket creates a new S3 bucket with the specified name, region, and object lock settings
 func (c *Client) CreateS3Bucket(bucketName, region string, objectLockEnabled bool) error {
 	url := fmt.Sprintf("%s/api/v4/org/containers", c.EndpointURL)
+	log.Printf("Executing POST request to URL: %s", url)
 
 	createRequest := S3BucketCreateRequest{
 		Name:   bucketName,
@@ -164,7 +166,7 @@ func (c *Client) CreateS3Bucket(bucketName, region string, objectLockEnabled boo
 		createRequest.S3ObjectLock = &S3BucketCreateObjectLock{
 			Enabled: true,
 			DefaultRetentionSetting: &S3BucketCreateRetentionSetting{
-				Mode: "governance",  // Lighter than compliance mode
+				Mode: "governance", // Lighter than compliance mode
 				Days: 1,            // Default to 1 day to avoid problems
 			},
 		}
@@ -184,7 +186,6 @@ func (c *Client) CreateS3Bucket(bucketName, region string, objectLockEnabled boo
 		return fmt.Errorf("error creating request: %w", err)
 	}
 
-	req.Header.Set("accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
 
 	body, err := c.doRequest(req)
@@ -202,6 +203,28 @@ func (c *Client) CreateS3Bucket(bucketName, region string, objectLockEnabled boo
 	}
 
 	// Clear cache since we created a new bucket
+	c.bucketCache = nil
+	c.bucketCacheTime = time.Time{}
+
+	return nil
+}
+
+// DeleteS3Bucket deletes an S3 bucket by name
+func (c *Client) DeleteS3Bucket(bucketName string) error {
+	url := fmt.Sprintf("%s/api/v4/org/containers/%s", c.EndpointURL, bucketName)
+	log.Printf("Executing DELETE request to URL: %s", url)
+
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return fmt.Errorf("error creating DELETE request: %w", err)
+	}
+
+	_, err = c.doRequest(req)
+	if err != nil {
+		return fmt.Errorf("error executing DELETE request: %w", err)
+	}
+
+	// Clear cache since we successfully deleted a bucket
 	c.bucketCache = nil
 	c.bucketCacheTime = time.Time{}
 
