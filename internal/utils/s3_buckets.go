@@ -87,6 +87,28 @@ func (d *DefaultRetentionSetting) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MarshalJSON handles conversion of integer days/years for API requests
+func (d *DefaultRetentionSetting) MarshalJSON() ([]byte, error) {
+	// Create a struct that includes the fields we want to marshal
+	aux := &struct {
+		Mode  string `json:"mode"`
+		Days  *int   `json:"days,omitempty"`
+		Years *int   `json:"years,omitempty"`
+	}{
+		Mode: d.Mode,
+	}
+
+	// Only include the field that has a value > 0, prioritizing years
+	if d.Years > 0 {
+		aux.Years = &d.Years
+	} else {
+		// Always send days if years is not set, even if it's 0
+		aux.Days = &d.Days
+	}
+
+	return json.Marshal(aux)
+}
+
 // DeleteObjectStatusConfig represents delete status for the bucket
 type DeleteObjectStatusConfig struct {
 	IsDeletingObjects  bool   `json:"isDeletingObjects"`
@@ -464,6 +486,8 @@ func (c *Client) UpdateS3BucketObjectLock(bucketName string, enabled bool, defau
 	if err != nil {
 		return fmt.Errorf("error marshalling bucket object lock update request: %w", err)
 	}
+
+	log.Printf("Request body: %s", string(requestBody))
 
 	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(requestBody))
 	if err != nil {
