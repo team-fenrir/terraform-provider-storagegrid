@@ -163,11 +163,13 @@ func (r *S3BucketResource) Read(ctx context.Context, req resource.ReadRequest, r
 		state.Region = types.StringValue("us-east-1")
 	}
 
-	// Set object lock enabled status from bucket data
-	if bucket.S3ObjectLock != nil {
-		state.ObjectLockEnabled = types.BoolValue(bucket.S3ObjectLock.Enabled)
-	} else {
+	// Get object lock status directly from the object lock API
+	objectLock, err := r.client.GetS3BucketObjectLock(bucketName)
+	if err != nil {
+		// If object lock API fails, assume object lock is disabled
 		state.ObjectLockEnabled = types.BoolValue(false)
+	} else {
+		state.ObjectLockEnabled = types.BoolValue(objectLock.Enabled)
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -234,11 +236,13 @@ func (r *S3BucketResource) ImportState(ctx context.Context, req resource.ImportS
 		state.Region = types.StringValue("us-east-1")
 	}
 
-	// Set object lock enabled status
-	if bucket.S3ObjectLock != nil {
-		state.ObjectLockEnabled = types.BoolValue(bucket.S3ObjectLock.Enabled)
-	} else {
+	// Get object lock status directly from the object lock API
+	objectLock, err := r.client.GetS3BucketObjectLock(bucketName)
+	if err != nil {
+		// If object lock API fails, assume object lock is disabled
 		state.ObjectLockEnabled = types.BoolValue(false)
+	} else {
+		state.ObjectLockEnabled = types.BoolValue(objectLock.Enabled)
 	}
 
 	// Set the state
