@@ -1,0 +1,291 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
+package provider
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/hashicorp/terraform-plugin-framework/path"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/team-fenrir/terraform-provider-storagegrid/internal/utils"
+)
+
+// Ensure provider defined types fully satisfy framework interfaces.
+var (
+	_ resource.Resource                = &S3BucketObjectLockConfigurationResource{}
+	_ resource.ResourceWithConfigure   = &S3BucketObjectLockConfigurationResource{}
+	_ resource.ResourceWithImportState = &S3BucketObjectLockConfigurationResource{}
+)
+
+func NewS3BucketObjectLockConfigurationResource() resource.Resource {
+	return &S3BucketObjectLockConfigurationResource{}
+}
+
+// S3BucketObjectLockConfigurationResource defines the resource implementation.
+type S3BucketObjectLockConfigurationResource struct {
+	client *utils.Client
+}
+
+// S3BucketObjectLockConfigurationResourceModel describes the resource data model.
+type S3BucketObjectLockConfigurationResourceModel struct {
+	BucketName              types.String                               `tfsdk:"bucket_name"`
+	Enabled                 types.Bool                                 `tfsdk:"enabled"`
+	DefaultRetentionSetting *DefaultRetentionSettingResourceModel     `tfsdk:"default_retention_setting"`
+	ID                      types.String                               `tfsdk:"id"`
+}
+
+// DefaultRetentionSettingResourceModel represents default retention settings for the resource
+type DefaultRetentionSettingResourceModel struct {
+	Mode  types.String `tfsdk:"mode"`
+	Days  types.Int64  `tfsdk:"days"`
+	Years types.Int64  `tfsdk:"years"`
+}
+
+func (r *S3BucketObjectLockConfigurationResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_s3_bucket_object_lock_configuration"
+}
+
+func (r *S3BucketObjectLockConfigurationResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		Description: "Manages object lock configuration for a StorageGrid S3 bucket.",
+		Attributes: map[string]schema.Attribute{
+			"bucket_name": schema.StringAttribute{
+				Description: "The name of the S3 bucket to configure object lock for.",
+				Required:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"enabled": schema.BoolAttribute{
+				Description: "Whether object lock is enabled for the bucket.",
+				Optional:    true,
+				Computed:    true,
+				Default:     booldefault.StaticBool(false),
+			},
+			"default_retention_setting": schema.SingleNestedAttribute{
+				Description: "Default retention settings for object lock.",
+				Optional:    true,
+				Computed:    true,
+				Attributes: map[string]schema.Attribute{
+					"mode": schema.StringAttribute{
+						Description: "The retention mode (compliance or governance).",
+						Optional:    true,
+						Computed:    true,
+						Default:     stringdefault.StaticString("compliance"),
+					},
+					"days": schema.Int64Attribute{
+						Description: "Retention period in days.",
+						Optional:    true,
+						Computed:    true,
+						Default:     int64default.StaticInt64(1),
+					},
+					"years": schema.Int64Attribute{
+						Description: "Retention period in years.",
+						Optional:    true,
+						Computed:    true,
+						Default:     int64default.StaticInt64(1),
+					},
+				},
+			},
+			"id": schema.StringAttribute{
+				Description: "The unique identifier for the object lock configuration (same as bucket_name).",
+				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+		},
+	}
+}
+
+func (r *S3BucketObjectLockConfigurationResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	if req.ProviderData == nil {
+		return
+	}
+
+	client, ok := req.ProviderData.(*utils.Client)
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected *utils.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+		return
+	}
+
+	r.client = client
+}
+
+func (r *S3BucketObjectLockConfigurationResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var plan S3BucketObjectLockConfigurationResourceModel
+
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	bucketName := plan.BucketName.ValueString()
+	enabled := plan.Enabled.ValueBool()
+
+	var defaultRetentionSetting *utils.DefaultRetentionSetting
+	if plan.DefaultRetentionSetting != nil {
+		defaultRetentionSetting = &utils.DefaultRetentionSetting{
+			Mode:  plan.DefaultRetentionSetting.Mode.ValueString(),
+			Days:  int(plan.DefaultRetentionSetting.Days.ValueInt64()),
+			Years: int(plan.DefaultRetentionSetting.Years.ValueInt64()),
+		}
+	}
+
+	err := r.client.UpdateS3BucketObjectLock(bucketName, enabled, defaultRetentionSetting)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			fmt.Sprintf("Unable to Create S3 Bucket Object Lock Configuration for %s", bucketName),
+			err.Error(),
+		)
+		return
+	}
+
+	// Set the ID (same as bucket name)
+	plan.ID = types.StringValue(bucketName)
+
+	// Save the plan to state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+}
+
+func (r *S3BucketObjectLockConfigurationResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var state S3BucketObjectLockConfigurationResourceModel
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	bucketName := state.BucketName.ValueString()
+	objectLock, err := r.client.GetS3BucketObjectLock(bucketName)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			fmt.Sprintf("Unable to Read S3 Bucket Object Lock Configuration for %s", bucketName),
+			err.Error(),
+		)
+		return
+	}
+
+	// Update state with current values
+	state.Enabled = types.BoolValue(objectLock.Enabled)
+	state.ID = types.StringValue(bucketName)
+
+	// Handle default retention setting
+	if objectLock.DefaultRetentionSetting != nil {
+		state.DefaultRetentionSetting = &DefaultRetentionSettingResourceModel{
+			Mode:  types.StringValue(objectLock.DefaultRetentionSetting.Mode),
+			Days:  types.Int64Value(int64(objectLock.DefaultRetentionSetting.Days)),
+			Years: types.Int64Value(int64(objectLock.DefaultRetentionSetting.Years)),
+		}
+	} else {
+		state.DefaultRetentionSetting = nil
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+}
+
+func (r *S3BucketObjectLockConfigurationResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var plan S3BucketObjectLockConfigurationResourceModel
+
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	bucketName := plan.BucketName.ValueString()
+	enabled := plan.Enabled.ValueBool()
+
+	var defaultRetentionSetting *utils.DefaultRetentionSetting
+	if plan.DefaultRetentionSetting != nil {
+		defaultRetentionSetting = &utils.DefaultRetentionSetting{
+			Mode:  plan.DefaultRetentionSetting.Mode.ValueString(),
+			Days:  int(plan.DefaultRetentionSetting.Days.ValueInt64()),
+			Years: int(plan.DefaultRetentionSetting.Years.ValueInt64()),
+		}
+	}
+
+	err := r.client.UpdateS3BucketObjectLock(bucketName, enabled, defaultRetentionSetting)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			fmt.Sprintf("Unable to Update S3 Bucket Object Lock Configuration for %s", bucketName),
+			err.Error(),
+		)
+		return
+	}
+
+	// Save the updated plan to state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+}
+
+func (r *S3BucketObjectLockConfigurationResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var state S3BucketObjectLockConfigurationResourceModel
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	bucketName := state.BucketName.ValueString()
+
+	// When deleting object lock configuration, disable object lock
+	// but keep default retention settings intact
+	err := r.client.UpdateS3BucketObjectLock(bucketName, false, nil)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			fmt.Sprintf("Unable to Delete S3 Bucket Object Lock Configuration for %s", bucketName),
+			err.Error(),
+		)
+		return
+	}
+
+	// State is automatically cleared on successful delete
+}
+
+func (r *S3BucketObjectLockConfigurationResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	// Import using the bucket name as the identifier
+	bucketName := req.ID
+
+	// Validate that the bucket exists and get object lock configuration
+	objectLock, err := r.client.GetS3BucketObjectLock(bucketName)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			fmt.Sprintf("Unable to Import S3 Bucket Object Lock Configuration for %s", bucketName),
+			fmt.Sprintf("Bucket does not exist or object lock configuration is not accessible: %s", err.Error()),
+		)
+		return
+	}
+
+	// Set the imported object lock configuration in state
+	state := S3BucketObjectLockConfigurationResourceModel{
+		BucketName: types.StringValue(bucketName),
+		Enabled:    types.BoolValue(objectLock.Enabled),
+		ID:         types.StringValue(bucketName),
+	}
+
+	// Handle default retention setting
+	if objectLock.DefaultRetentionSetting != nil {
+		state.DefaultRetentionSetting = &DefaultRetentionSettingResourceModel{
+			Mode:  types.StringValue(objectLock.DefaultRetentionSetting.Mode),
+			Days:  types.Int64Value(int64(objectLock.DefaultRetentionSetting.Days)),
+			Years: types.Int64Value(int64(objectLock.DefaultRetentionSetting.Years)),
+		}
+	}
+
+	// Set the state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+
+	// Set the ID attribute explicitly for import
+	resource.ImportStatePassthroughID(ctx, path.Root("bucket_name"), req, resp)
+}

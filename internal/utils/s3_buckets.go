@@ -411,3 +411,48 @@ func (c *Client) GetS3BucketObjectLock(bucketName string) (*S3BucketObjectLockDa
 
 	return &apiResponse.Data, nil
 }
+
+// S3BucketObjectLockUpdateRequest represents the request body for updating bucket object lock
+type S3BucketObjectLockUpdateRequest struct {
+	Enabled                 bool                     `json:"enabled"`
+	DefaultRetentionSetting *DefaultRetentionSetting `json:"defaultRetentionSetting,omitempty"`
+}
+
+// UpdateS3BucketObjectLock updates object lock configuration for a specific S3 bucket
+func (c *Client) UpdateS3BucketObjectLock(bucketName string, enabled bool, defaultRetentionSetting *DefaultRetentionSetting) error {
+	url := fmt.Sprintf("%s/api/v4/org/containers/%s/object-lock", c.EndpointURL, bucketName)
+	log.Printf("Executing PUT request to URL: %s", url)
+
+	updateRequest := S3BucketObjectLockUpdateRequest{
+		Enabled:                 enabled,
+		DefaultRetentionSetting: defaultRetentionSetting,
+	}
+
+	requestBody, err := json.Marshal(updateRequest)
+	if err != nil {
+		return fmt.Errorf("error marshalling bucket object lock update request: %w", err)
+	}
+
+	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return fmt.Errorf("error creating PUT request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	body, err := c.doRequest(req)
+	if err != nil {
+		return fmt.Errorf("error executing PUT request: %w", err)
+	}
+
+	var apiResponse S3BucketObjectLockAPIResponse
+	if err := json.Unmarshal(body, &apiResponse); err != nil {
+		return fmt.Errorf("error unmarshalling bucket object lock update response: %w", err)
+	}
+
+	if apiResponse.Status != "success" {
+		return fmt.Errorf("bucket object lock update failed with status: %s", apiResponse.Status)
+	}
+
+	return nil
+}
