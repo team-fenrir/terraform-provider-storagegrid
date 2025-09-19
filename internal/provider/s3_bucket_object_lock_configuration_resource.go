@@ -71,6 +71,15 @@ func (r *S3BucketObjectLockConfigurationResource) Schema(ctx context.Context, re
 				Computed:    true,
 				Default:     booldefault.StaticBool(false),
 			},
+			"id": schema.StringAttribute{
+				Description: "The unique identifier for the object lock configuration (same as bucket_name).",
+				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+		},
+		Blocks: map[string]schema.Block{
 			"default_retention_setting": schema.SingleNestedBlock{
 				Description: "Default retention settings for object lock.",
 				Attributes: map[string]schema.Attribute{
@@ -92,13 +101,6 @@ func (r *S3BucketObjectLockConfigurationResource) Schema(ctx context.Context, re
 						Computed:    true,
 						Default:     int64default.StaticInt64(1),
 					},
-				},
-			},
-			"id": schema.StringAttribute{
-				Description: "The unique identifier for the object lock configuration (same as bucket_name).",
-				Computed:    true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 		},
