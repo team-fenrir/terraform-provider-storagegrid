@@ -51,36 +51,56 @@ type S3ObjectLockConfig struct {
 
 // DefaultRetentionSetting represents default retention settings for object lock
 type DefaultRetentionSetting struct {
-	Mode  string `json:"mode"`
+	Mode  string `json:"-"`
 	Days  int    `json:"-"`
 	Years int    `json:"-"`
-	DaysStr  string `json:"days,omitempty"`
-	YearsStr string `json:"years,omitempty"`
 }
 
-// UnmarshalJSON handles conversion of string days/years to integers
+// UnmarshalJSON handles conversion of string or number days/years to integers
 func (d *DefaultRetentionSetting) UnmarshalJSON(data []byte) error {
-	type Alias DefaultRetentionSetting
+	// First try to unmarshal into a flexible structure that can handle both strings and numbers
 	aux := &struct {
-		*Alias
-	}{
-		Alias: (*Alias)(d),
-	}
+		Mode  string      `json:"mode"`
+		Days  interface{} `json:"days,omitempty"`
+		Years interface{} `json:"years,omitempty"`
+	}{}
 
-	if err := json.Unmarshal(data, &aux); err != nil {
+	if err := json.Unmarshal(data, aux); err != nil {
 		return err
 	}
 
-	// Convert string values to integers
-	if d.DaysStr != "" {
-		if days, err := strconv.Atoi(d.DaysStr); err == nil {
-			d.Days = days
+	// Set the mode
+	d.Mode = aux.Mode
+
+	// Handle days field - can be string or number
+	if aux.Days != nil {
+		switch v := aux.Days.(type) {
+		case string:
+			if v != "" {
+				if days, err := strconv.Atoi(v); err == nil {
+					d.Days = days
+				}
+			}
+		case float64:
+			d.Days = int(v)
+		case int:
+			d.Days = v
 		}
 	}
 
-	if d.YearsStr != "" {
-		if years, err := strconv.Atoi(d.YearsStr); err == nil {
-			d.Years = years
+	// Handle years field - can be string or number
+	if aux.Years != nil {
+		switch v := aux.Years.(type) {
+		case string:
+			if v != "" {
+				if years, err := strconv.Atoi(v); err == nil {
+					d.Years = years
+				}
+			}
+		case float64:
+			d.Years = int(v)
+		case int:
+			d.Years = v
 		}
 	}
 
