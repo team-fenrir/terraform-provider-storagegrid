@@ -29,22 +29,40 @@ type S3BucketDataSource struct {
 }
 
 type S3BucketDataSourceModel struct {
-	BucketName types.String           `tfsdk:"bucket_name"`
-	Status     types.String           `tfsdk:"status"`
-	APIVersion types.String           `tfsdk:"api_version"`
-	Data       *S3BucketDataModel     `tfsdk:"data"`
+	BucketName   types.String       `tfsdk:"bucket_name"`
+	Name         types.String       `tfsdk:"name"`
+	CreationTime types.String       `tfsdk:"creation_time"`
+	Region       types.String       `tfsdk:"region"`
+	Compliance   *ComplianceModel   `tfsdk:"compliance"`
+	S3ObjectLock *S3ObjectLockModel `tfsdk:"s3_object_lock"`
+	DeleteStatus *DeleteStatusModel `tfsdk:"delete_status"`
 }
 
-// S3BucketDataModel maps the nested 'data' object from the API response.
-type S3BucketDataModel struct {
-	ID                     types.String `tfsdk:"id"`
-	Name                   types.String `tfsdk:"name"`
-	CreationTime           types.String `tfsdk:"creation_time"`
-	Region                 types.String `tfsdk:"region"`
-	ObjectLockEnabled      types.Bool   `tfsdk:"object_lock_enabled"`
-	ComplianceEnabled      types.Bool   `tfsdk:"compliance_enabled"`
-	ConsistencyLevel       types.String `tfsdk:"consistency_level"`
-	LastAccessTimeEnabled  types.Bool   `tfsdk:"last_access_time_enabled"`
+// ComplianceModel maps compliance configuration from the API response
+type ComplianceModel struct {
+	AutoDelete             types.Bool  `tfsdk:"auto_delete"`
+	LegalHold              types.Bool  `tfsdk:"legal_hold"`
+	RetentionPeriodMinutes types.Int64 `tfsdk:"retention_period_minutes"`
+}
+
+// S3ObjectLockModel maps S3 object lock configuration from the API response
+type S3ObjectLockModel struct {
+	Enabled                 types.Bool                    `tfsdk:"enabled"`
+	DefaultRetentionSetting *DefaultRetentionSettingModel `tfsdk:"default_retention_setting"`
+}
+
+// DefaultRetentionSettingModel maps default retention settings
+type DefaultRetentionSettingModel struct {
+	Mode  types.String `tfsdk:"mode"`
+	Days  types.Int64  `tfsdk:"days"`
+	Years types.Int64  `tfsdk:"years"`
+}
+
+// DeleteStatusModel maps delete object status from the API response
+type DeleteStatusModel struct {
+	IsDeletingObjects  types.Bool   `tfsdk:"is_deleting_objects"`
+	InitialObjectCount types.String `tfsdk:"initial_object_count"`
+	InitialObjectBytes types.String `tfsdk:"initial_object_bytes"`
 }
 
 func (d *S3BucketDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -59,48 +77,85 @@ func (d *S3BucketDataSource) Schema(_ context.Context, _ datasource.SchemaReques
 				Description: "The name of the S3 bucket to fetch.",
 				Required:    true,
 			},
-			"status": schema.StringAttribute{
-				Description: "The status of the API response.",
+			"name": schema.StringAttribute{
+				Description: "The name of the bucket.",
 				Computed:    true,
 			},
-			"api_version": schema.StringAttribute{
-				Description: "The version of the API.",
+			"creation_time": schema.StringAttribute{
+				Description: "The time when the bucket was created.",
 				Computed:    true,
 			},
-			"data": schema.SingleNestedAttribute{
-				Description: "The main data object for the StorageGrid S3 bucket.",
+			"region": schema.StringAttribute{
+				Description: "The region where the bucket is located.",
 				Computed:    true,
+				Optional:    true,
+			},
+			"compliance": schema.SingleNestedAttribute{
+				Description: "Compliance settings for the bucket.",
+				Computed:    true,
+				Optional:    true,
 				Attributes: map[string]schema.Attribute{
-					"id": schema.StringAttribute{
-						Description: "The unique identifier for the bucket.",
+					"auto_delete": schema.BoolAttribute{
+						Description: "Indicates if auto-delete is enabled.",
 						Computed:    true,
 					},
-					"name": schema.StringAttribute{
-						Description: "The name of the bucket.",
+					"legal_hold": schema.BoolAttribute{
+						Description: "Indicates if legal hold is enabled.",
 						Computed:    true,
 					},
-					"creation_time": schema.StringAttribute{
-						Description: "The time when the bucket was created.",
+					"retention_period_minutes": schema.Int64Attribute{
+						Description: "Retention period in minutes.",
 						Computed:    true,
 					},
-					"region": schema.StringAttribute{
-						Description: "The region where the bucket is located.",
+				},
+			},
+			"s3_object_lock": schema.SingleNestedAttribute{
+				Description: "S3 object lock configuration for the bucket.",
+				Computed:    true,
+				Optional:    true,
+				Attributes: map[string]schema.Attribute{
+					"enabled": schema.BoolAttribute{
+						Description: "Indicates if S3 object lock is enabled.",
 						Computed:    true,
 					},
-					"object_lock_enabled": schema.BoolAttribute{
-						Description: "Indicates if object lock is enabled for the bucket.",
+					"default_retention_setting": schema.SingleNestedAttribute{
+						Description: "Default retention settings for object lock.",
+						Computed:    true,
+						Optional:    true,
+						Attributes: map[string]schema.Attribute{
+							"mode": schema.StringAttribute{
+								Description: "The retention mode (compliance or governance).",
+								Computed:    true,
+							},
+							"days": schema.Int64Attribute{
+								Description: "Retention period in days.",
+								Computed:    true,
+								Optional:    true,
+							},
+							"years": schema.Int64Attribute{
+								Description: "Retention period in years.",
+								Computed:    true,
+								Optional:    true,
+							},
+						},
+					},
+				},
+			},
+			"delete_status": schema.SingleNestedAttribute{
+				Description: "Delete object status for the bucket.",
+				Computed:    true,
+				Optional:    true,
+				Attributes: map[string]schema.Attribute{
+					"is_deleting_objects": schema.BoolAttribute{
+						Description: "Indicates if objects are being deleted.",
 						Computed:    true,
 					},
-					"compliance_enabled": schema.BoolAttribute{
-						Description: "Indicates if compliance is enabled for the bucket.",
+					"initial_object_count": schema.StringAttribute{
+						Description: "Initial count of objects when deletion started.",
 						Computed:    true,
 					},
-					"consistency_level": schema.StringAttribute{
-						Description: "The consistency level configured for the bucket.",
-						Computed:    true,
-					},
-					"last_access_time_enabled": schema.BoolAttribute{
-						Description: "Indicates if last access time tracking is enabled.",
+					"initial_object_bytes": schema.StringAttribute{
+						Description: "Initial size in bytes when deletion started.",
 						Computed:    true,
 					},
 				},
@@ -133,7 +188,7 @@ func (d *S3BucketDataSource) Read(ctx context.Context, req datasource.ReadReques
 	}
 
 	bucketName := state.BucketName.ValueString()
-	apiResponse, err := d.client.GetS3Bucket(bucketName)
+	bucket, err := d.client.GetS3Bucket(bucketName)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			fmt.Sprintf("Unable to Read S3 Bucket %s", bucketName),
@@ -142,21 +197,60 @@ func (d *S3BucketDataSource) Read(ctx context.Context, req datasource.ReadReques
 		return
 	}
 
-	bucket := apiResponse.Data
-
 	// Map API response data to the Terraform state model
-	state.Status = types.StringValue(apiResponse.Status)
-	state.APIVersion = types.StringValue(apiResponse.APIVersion)
+	state.Name = types.StringValue(bucket.Name)
+	state.CreationTime = types.StringValue(bucket.CreationTime)
 
-	state.Data = &S3BucketDataModel{
-		ID:                     types.StringValue(bucket.ID),
-		Name:                   types.StringValue(bucket.Name),
-		CreationTime:           types.StringValue(bucket.CreationTime),
-		Region:                 types.StringValue(bucket.Region),
-		ObjectLockEnabled:      types.BoolValue(bucket.ObjectLockEnabled),
-		ComplianceEnabled:      types.BoolValue(bucket.ComplianceEnabled),
-		ConsistencyLevel:       types.StringValue(bucket.ConsistencyLevel),
-		LastAccessTimeEnabled:  types.BoolValue(bucket.LastAccessTimeEnabled),
+	// Handle optional region field with default
+	if bucket.Region != "" {
+		state.Region = types.StringValue(bucket.Region)
+	} else {
+		state.Region = types.StringValue("us-east-1")
+	}
+
+	// Handle optional compliance configuration
+	if bucket.Compliance != nil {
+		state.Compliance = &ComplianceModel{
+			AutoDelete:             types.BoolValue(bucket.Compliance.AutoDelete),
+			LegalHold:              types.BoolValue(bucket.Compliance.LegalHold),
+			RetentionPeriodMinutes: types.Int64Value(bucket.Compliance.RetentionPeriodMinutes),
+		}
+	}
+
+	// Handle optional S3 object lock configuration
+	if bucket.S3ObjectLock != nil {
+		s3ObjectLock := &S3ObjectLockModel{
+			Enabled: types.BoolValue(bucket.S3ObjectLock.Enabled),
+		}
+
+		if bucket.S3ObjectLock.DefaultRetentionSetting != nil {
+			s3ObjectLock.DefaultRetentionSetting = &DefaultRetentionSettingModel{
+				Mode: types.StringValue(bucket.S3ObjectLock.DefaultRetentionSetting.Mode),
+			}
+
+			if bucket.S3ObjectLock.DefaultRetentionSetting.Days > 0 {
+				s3ObjectLock.DefaultRetentionSetting.Days = types.Int64Value(int64(bucket.S3ObjectLock.DefaultRetentionSetting.Days))
+			} else {
+				s3ObjectLock.DefaultRetentionSetting.Days = types.Int64Null()
+			}
+
+			if bucket.S3ObjectLock.DefaultRetentionSetting.Years > 0 {
+				s3ObjectLock.DefaultRetentionSetting.Years = types.Int64Value(int64(bucket.S3ObjectLock.DefaultRetentionSetting.Years))
+			} else {
+				s3ObjectLock.DefaultRetentionSetting.Years = types.Int64Null()
+			}
+		}
+
+		state.S3ObjectLock = s3ObjectLock
+	}
+
+	// Handle optional delete status configuration
+	if bucket.DeleteStatus != nil {
+		state.DeleteStatus = &DeleteStatusModel{
+			IsDeletingObjects:  types.BoolValue(bucket.DeleteStatus.IsDeletingObjects),
+			InitialObjectCount: types.StringValue(bucket.DeleteStatus.InitialObjectCount),
+			InitialObjectBytes: types.StringValue(bucket.DeleteStatus.InitialObjectBytes),
+		}
 	}
 
 	diags := resp.State.Set(ctx, &state)

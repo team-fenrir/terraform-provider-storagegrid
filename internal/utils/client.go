@@ -17,6 +17,17 @@ type Client struct {
 	EndpointURL string
 	HTTPClient  *http.Client
 	Token       string
+
+	// Cache for bucket list
+	// NOTE: Currently using simple caching without mutex for simplicity.
+	// If concurrent access issues arise (multiple goroutines corrupting cache or causing panics),
+	// add thread safety with sync.RWMutex:
+	//   bucketCacheMux  sync.RWMutex
+	// Then wrap cache reads with bucketCacheMux.RLock()/RUnlock() and
+	// cache writes with bucketCacheMux.Lock()/Unlock() using double-checked locking pattern
+	// to prevent race conditions where multiple goroutines fetch/update cache simultaneously.
+	bucketCache     []S3BucketData
+	bucketCacheTime time.Time
 }
 
 // SignInBody represents the request body for the authentication request.
