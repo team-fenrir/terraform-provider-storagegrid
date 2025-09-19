@@ -185,8 +185,10 @@ func (r *S3BucketVersioningResource) Delete(ctx context.Context, req resource.De
 
 	bucketName := state.BucketName.ValueString()
 
-	// Reset versioning to disabled state (both false)
-	err := r.client.UpdateS3BucketVersioning(bucketName, false, false)
+	// When deleting the versioning resource, set versioning to suspended state
+	// (versioningEnabled=false, versioningSuspended=true) since StorageGrid
+	// requires at least one of them to be true
+	err := r.client.UpdateS3BucketVersioning(bucketName, false, true)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			fmt.Sprintf("Unable to Delete S3 Bucket Versioning Configuration for %s", bucketName),
