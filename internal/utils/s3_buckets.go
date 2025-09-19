@@ -328,3 +328,48 @@ func (c *Client) GetS3BucketVersioning(bucketName string) (*S3BucketVersioningDa
 
 	return &apiResponse.Data, nil
 }
+
+// S3BucketVersioningUpdateRequest represents the request body for updating bucket versioning
+type S3BucketVersioningUpdateRequest struct {
+	VersioningEnabled   bool `json:"versioningEnabled"`
+	VersioningSuspended bool `json:"versioningSuspended"`
+}
+
+// UpdateS3BucketVersioning updates versioning configuration for a specific S3 bucket
+func (c *Client) UpdateS3BucketVersioning(bucketName string, versioningEnabled, versioningSuspended bool) error {
+	url := fmt.Sprintf("%s/api/v4/org/containers/%s/versioning", c.EndpointURL, bucketName)
+	log.Printf("Executing PUT request to URL: %s", url)
+
+	updateRequest := S3BucketVersioningUpdateRequest{
+		VersioningEnabled:   versioningEnabled,
+		VersioningSuspended: versioningSuspended,
+	}
+
+	requestBody, err := json.Marshal(updateRequest)
+	if err != nil {
+		return fmt.Errorf("error marshalling bucket versioning update request: %w", err)
+	}
+
+	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return fmt.Errorf("error creating PUT request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	body, err := c.doRequest(req)
+	if err != nil {
+		return fmt.Errorf("error executing PUT request: %w", err)
+	}
+
+	var apiResponse S3BucketVersioningAPIResponse
+	if err := json.Unmarshal(body, &apiResponse); err != nil {
+		return fmt.Errorf("error unmarshalling bucket versioning update response: %w", err)
+	}
+
+	if apiResponse.Status != "success" {
+		return fmt.Errorf("bucket versioning update failed with status: %s", apiResponse.Status)
+	}
+
+	return nil
+}

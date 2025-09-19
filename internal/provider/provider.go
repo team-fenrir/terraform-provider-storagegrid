@@ -222,6 +222,7 @@ func (p *StorageGridProvider) Resources(_ context.Context) []func() resource.Res
 		NewUserResource,
 		NewAccessKeysResource,
 		NewS3BucketResource,
+		NewS3BucketVersioningResource,
 	}
 }
 func (p *StorageGridProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
