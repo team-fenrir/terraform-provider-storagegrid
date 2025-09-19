@@ -56,7 +56,9 @@ func (r *S3BucketObjectLockConfigurationResource) Metadata(ctx context.Context, 
 
 func (r *S3BucketObjectLockConfigurationResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Manages object lock configuration for a StorageGrid S3 bucket.",
+		Description: "Manages object lock configuration for a StorageGrid S3 bucket. " +
+			"NOTE: Object lock must be enabled at bucket creation time using the storagegrid_s3_bucket resource. " +
+			"This resource can only modify object lock settings on buckets that already have object lock enabled.",
 		Attributes: map[string]schema.Attribute{
 			"bucket_name": schema.StringAttribute{
 				Description: "The name of the S3 bucket to configure object lock for.",
@@ -66,7 +68,9 @@ func (r *S3BucketObjectLockConfigurationResource) Schema(ctx context.Context, re
 				},
 			},
 			"enabled": schema.BoolAttribute{
-				Description: "Whether object lock is enabled for the bucket.",
+				Description: "Whether object lock is enabled for the bucket. " +
+					"NOTE: Can only be set to true if the bucket was created with object_lock_enabled=true. " +
+					"Cannot enable object lock on existing buckets that don't have it.",
 				Optional:    true,
 				Computed:    true,
 				Default:     booldefault.StaticBool(false),
@@ -134,6 +138,26 @@ func (r *S3BucketObjectLockConfigurationResource) Create(ctx context.Context, re
 
 	bucketName := plan.BucketName.ValueString()
 	enabled := plan.Enabled.ValueBool()
+
+	// Check if we're trying to enable object lock on a bucket that doesn't have it
+	if enabled {
+		currentObjectLock, err := r.client.GetS3BucketObjectLock(bucketName)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Unable to Check Current Object Lock Status for %s", bucketName),
+				err.Error(),
+			)
+			return
+		}
+
+		if !currentObjectLock.Enabled {
+			resp.Diagnostics.AddError(
+				"Cannot Enable Object Lock on Existing Bucket",
+				fmt.Sprintf("Bucket %s does not have object lock enabled. Object lock must be enabled at bucket creation time using the storagegrid_s3_bucket resource with object_lock_enabled=true. This resource can only modify object lock settings on buckets that already have object lock enabled.", bucketName),
+			)
+			return
+		}
+	}
 
 	var defaultRetentionSetting *utils.DefaultRetentionSetting
 	if plan.DefaultRetentionSetting != nil {
