@@ -4,6 +4,7 @@
 package utils
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -99,6 +100,84 @@ func (c *Client) getCachedBucketList() ([]S3BucketData, error) {
 	c.bucketCacheTime = time.Now()
 
 	return c.bucketCache, nil
+}
+
+// S3BucketCreateRequest represents the request body for creating an S3 bucket
+type S3BucketCreateRequest struct {
+	Name   string `json:"name"`
+	Region string `json:"region"`
+}
+
+// S3BucketCreateResponse represents the API response structure for bucket creation
+type S3BucketCreateResponse struct {
+	ResponseTime string                 `json:"responseTime"`
+	Status       string                 `json:"status"`
+	APIVersion   string                 `json:"apiVersion"`
+	Deprecated   bool                   `json:"deprecated"`
+	Data         S3BucketCreateData     `json:"data"`
+	Metadata     *S3BucketCreateMetadata `json:"metadata,omitempty"`
+}
+
+// S3BucketCreateData represents the data returned after bucket creation
+type S3BucketCreateData struct {
+	Name   string `json:"name"`
+	Region string `json:"region"`
+}
+
+// S3BucketCreateMetadata represents metadata including alerts
+type S3BucketCreateMetadata struct {
+	Alerts []S3BucketAlert `json:"alerts,omitempty"`
+}
+
+// S3BucketAlert represents alert information
+type S3BucketAlert struct {
+	Deprecated bool   `json:"deprecated"`
+	Severity   string `json:"severity"`
+	Text       string `json:"text"`
+	Key        string `json:"key"`
+}
+
+// CreateS3Bucket creates a new S3 bucket with the specified name and region
+func (c *Client) CreateS3Bucket(bucketName, region string) error {
+	url := fmt.Sprintf("%s/api/v4/org/containers", c.EndpointURL)
+
+	createRequest := S3BucketCreateRequest{
+		Name:   bucketName,
+		Region: region,
+	}
+
+	requestBody, err := json.Marshal(createRequest)
+	if err != nil {
+		return fmt.Errorf("error marshalling bucket create request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return fmt.Errorf("error creating request: %w", err)
+	}
+
+	req.Header.Set("accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+
+	body, err := c.doRequest(req)
+	if err != nil {
+		return fmt.Errorf("error executing request: %w", err)
+	}
+
+	var apiResponse S3BucketCreateResponse
+	if err := json.Unmarshal(body, &apiResponse); err != nil {
+		return fmt.Errorf("error unmarshalling bucket create response: %w", err)
+	}
+
+	if apiResponse.Status != "success" {
+		return fmt.Errorf("bucket creation failed with status: %s", apiResponse.Status)
+	}
+
+	// Clear cache since we created a new bucket
+	c.bucketCache = nil
+	c.bucketCacheTime = time.Time{}
+
+	return nil
 }
 
 // GetS3Bucket retrieves information about a specific S3 bucket by name.
