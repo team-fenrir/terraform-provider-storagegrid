@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -20,8 +21,9 @@ import (
 
 // Ensure provider defined types fully satisfy framework interfaces.
 var (
-	_ resource.Resource              = &S3BucketResource{}
-	_ resource.ResourceWithConfigure = &S3BucketResource{}
+	_ resource.Resource                = &S3BucketResource{}
+	_ resource.ResourceWithConfigure   = &S3BucketResource{}
+	_ resource.ResourceWithImportState = &S3BucketResource{}
 )
 
 func NewS3BucketResource() resource.Resource {
@@ -203,4 +205,45 @@ func (r *S3BucketResource) Delete(ctx context.Context, req resource.DeleteReques
 	}
 
 	// State is automatically cleared on successful delete
+}
+
+func (r *S3BucketResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	// Import using the bucket name as the identifier
+	bucketName := req.ID
+
+	// Validate that the bucket exists by trying to fetch it
+	bucket, err := r.client.GetS3Bucket(bucketName)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			fmt.Sprintf("Unable to Import S3 Bucket %s", bucketName),
+			fmt.Sprintf("Bucket does not exist or is not accessible: %s", err.Error()),
+		)
+		return
+	}
+
+	// Set the imported bucket data in state
+	state := S3BucketResourceModel{
+		Name: types.StringValue(bucket.Name),
+		ID:   types.StringValue(bucket.Name),
+	}
+
+	// Set region with fallback to default
+	if bucket.Region != "" {
+		state.Region = types.StringValue(bucket.Region)
+	} else {
+		state.Region = types.StringValue("us-east-1")
+	}
+
+	// Set object lock enabled status
+	if bucket.S3ObjectLock != nil {
+		state.ObjectLockEnabled = types.BoolValue(bucket.S3ObjectLock.Enabled)
+	} else {
+		state.ObjectLockEnabled = types.BoolValue(false)
+	}
+
+	// Set the state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+
+	// Set the ID attribute explicitly for import
+	resource.ImportStatePassthroughID(ctx, path.Root("name"), req, resp)
 }

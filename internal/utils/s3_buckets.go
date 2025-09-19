@@ -270,8 +270,8 @@ func isTimeoutError(err error) bool {
 	// Check for timeout in error message
 	errStr := err.Error()
 	return strings.Contains(errStr, "timeout") ||
-		   strings.Contains(errStr, "deadline exceeded") ||
-		   strings.Contains(errStr, "Client.Timeout exceeded")
+		strings.Contains(errStr, "deadline exceeded") ||
+		strings.Contains(errStr, "Client.Timeout exceeded")
 }
 
 // GetS3Bucket retrieves information about a specific S3 bucket by name.
