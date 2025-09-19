@@ -71,10 +71,8 @@ func (r *S3BucketObjectLockConfigurationResource) Schema(ctx context.Context, re
 				Computed:    true,
 				Default:     booldefault.StaticBool(false),
 			},
-			"default_retention_setting": schema.SingleNestedAttribute{
+			"default_retention_setting": schema.SingleNestedBlock{
 				Description: "Default retention settings for object lock.",
-				Optional:    true,
-				Computed:    true,
 				Attributes: map[string]schema.Attribute{
 					"mode": schema.StringAttribute{
 						Description: "The retention mode (compliance or governance).",
