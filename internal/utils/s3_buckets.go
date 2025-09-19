@@ -104,8 +104,21 @@ func (c *Client) getCachedBucketList() ([]S3BucketData, error) {
 
 // S3BucketCreateRequest represents the request body for creating an S3 bucket
 type S3BucketCreateRequest struct {
-	Name   string `json:"name"`
-	Region string `json:"region"`
+	Name         string                        `json:"name"`
+	Region       string                        `json:"region"`
+	S3ObjectLock *S3BucketCreateObjectLock     `json:"s3ObjectLock,omitempty"`
+}
+
+// S3BucketCreateObjectLock represents object lock settings for bucket creation
+type S3BucketCreateObjectLock struct {
+	Enabled               bool                              `json:"enabled"`
+	DefaultRetentionSetting *S3BucketCreateRetentionSetting `json:"defaultRetentionSetting,omitempty"`
+}
+
+// S3BucketCreateRetentionSetting represents default retention settings for bucket creation
+type S3BucketCreateRetentionSetting struct {
+	Mode string `json:"mode"`
+	Days int    `json:"days"`
 }
 
 // S3BucketCreateResponse represents the API response structure for bucket creation
@@ -137,13 +150,28 @@ type S3BucketAlert struct {
 	Key        string `json:"key"`
 }
 
-// CreateS3Bucket creates a new S3 bucket with the specified name and region
-func (c *Client) CreateS3Bucket(bucketName, region string) error {
+// CreateS3Bucket creates a new S3 bucket with the specified name, region, and object lock settings
+func (c *Client) CreateS3Bucket(bucketName, region string, objectLockEnabled bool) error {
 	url := fmt.Sprintf("%s/api/v4/org/containers", c.EndpointURL)
 
 	createRequest := S3BucketCreateRequest{
 		Name:   bucketName,
 		Region: region,
+	}
+
+	// Add object lock configuration if enabled
+	if objectLockEnabled {
+		createRequest.S3ObjectLock = &S3BucketCreateObjectLock{
+			Enabled: true,
+			DefaultRetentionSetting: &S3BucketCreateRetentionSetting{
+				Mode: "governance",  // Lighter than compliance mode
+				Days: 1,            // Default to 1 day to avoid problems
+			},
+		}
+	} else {
+		createRequest.S3ObjectLock = &S3BucketCreateObjectLock{
+			Enabled: false,
+		}
 	}
 
 	requestBody, err := json.Marshal(createRequest)

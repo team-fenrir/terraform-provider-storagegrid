@@ -9,6 +9,8 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -33,9 +35,10 @@ type S3BucketResource struct {
 
 // S3BucketResourceModel describes the resource data model.
 type S3BucketResourceModel struct {
-	Name   types.String `tfsdk:"name"`
-	Region types.String `tfsdk:"region"`
-	ID     types.String `tfsdk:"id"`
+	Name              types.String `tfsdk:"name"`
+	Region            types.String `tfsdk:"region"`
+	ObjectLockEnabled types.Bool   `tfsdk:"object_lock_enabled"`
+	ID                types.String `tfsdk:"id"`
 }
 
 func (r *S3BucketResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -60,6 +63,15 @@ func (r *S3BucketResource) Schema(ctx context.Context, req resource.SchemaReques
 				Default:     stringdefault.StaticString("us-east-1"),
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"object_lock_enabled": schema.BoolAttribute{
+				Description: "Whether S3 Object Lock is enabled for this bucket. Defaults to false. When enabled, uses governance mode with 1 day retention as default.",
+				Optional:    true,
+				Computed:    true,
+				Default:     booldefault.StaticBool(false),
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.RequiresReplace(),
 				},
 			},
 			"id": schema.StringAttribute{
@@ -101,8 +113,9 @@ func (r *S3BucketResource) Create(ctx context.Context, req resource.CreateReques
 	// Create the bucket
 	bucketName := plan.Name.ValueString()
 	region := plan.Region.ValueString()
+	objectLockEnabled := plan.ObjectLockEnabled.ValueBool()
 
-	err := r.client.CreateS3Bucket(bucketName, region)
+	err := r.client.CreateS3Bucket(bucketName, region, objectLockEnabled)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			fmt.Sprintf("Unable to Create S3 Bucket %s", bucketName),
@@ -146,6 +159,13 @@ func (r *S3BucketResource) Read(ctx context.Context, req resource.ReadRequest, r
 		state.Region = types.StringValue(bucket.Region)
 	} else {
 		state.Region = types.StringValue("us-east-1")
+	}
+
+	// Set object lock enabled status from bucket data
+	if bucket.S3ObjectLock != nil {
+		state.ObjectLockEnabled = types.BoolValue(bucket.S3ObjectLock.Enabled)
+	} else {
+		state.ObjectLockEnabled = types.BoolValue(false)
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
