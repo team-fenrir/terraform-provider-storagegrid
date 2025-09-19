@@ -229,6 +229,7 @@ func (p *StorageGridProvider) DataSources(ctx context.Context) []func() datasour
 		NewGroupDataSource,
 		NewUserDataSource,
 		NewS3BucketDataSource,
+		NewS3BucketVersioningDataSource,
 	}
 }
 

@@ -290,3 +290,41 @@ func (c *Client) GetS3Bucket(bucketName string) (*S3BucketData, error) {
 
 	return nil, fmt.Errorf("bucket %s not found", bucketName)
 }
+
+// S3BucketVersioningAPIResponse represents the API response structure for bucket versioning
+type S3BucketVersioningAPIResponse struct {
+	ResponseTime string                 `json:"responseTime"`
+	Status       string                 `json:"status"`
+	APIVersion   string                 `json:"apiVersion"`
+	Deprecated   bool                   `json:"deprecated"`
+	Data         S3BucketVersioningData `json:"data"`
+}
+
+// S3BucketVersioningData represents the versioning configuration for an S3 bucket
+type S3BucketVersioningData struct {
+	VersioningEnabled   bool `json:"versioningEnabled"`
+	VersioningSuspended bool `json:"versioningSuspended"`
+}
+
+// GetS3BucketVersioning retrieves versioning configuration for a specific S3 bucket
+func (c *Client) GetS3BucketVersioning(bucketName string) (*S3BucketVersioningData, error) {
+	url := fmt.Sprintf("%s/api/v4/org/containers/%s/versioning", c.EndpointURL, bucketName)
+	log.Printf("Executing GET request to URL: %s", url)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error creating request: %w", err)
+	}
+
+	body, err := c.doRequest(req)
+	if err != nil {
+		return nil, fmt.Errorf("error executing request: %w", err)
+	}
+
+	var apiResponse S3BucketVersioningAPIResponse
+	if err := json.Unmarshal(body, &apiResponse); err != nil {
+		return nil, fmt.Errorf("error unmarshalling S3 bucket versioning response: %w", err)
+	}
+
+	return &apiResponse.Data, nil
+}
