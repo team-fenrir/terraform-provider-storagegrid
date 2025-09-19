@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -110,10 +111,18 @@ func (r *S3BucketVersioningResource) Create(ctx context.Context, req resource.Cr
 
 	err := r.client.UpdateS3BucketVersioning(bucketName, versioningEnabled, versioningSuspended)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			fmt.Sprintf("Unable to Create S3 Bucket Versioning Configuration for %s", bucketName),
-			err.Error(),
-		)
+		// Check if this is a conflict due to object lock being enabled
+		if strings.Contains(err.Error(), "Object Lock configuration is present") {
+			resp.Diagnostics.AddError(
+				"Cannot Modify Versioning on Object Lock Enabled Bucket",
+				fmt.Sprintf("Bucket %s has object lock enabled. When object lock is enabled, versioning cannot be modified. Object lock requires versioning to be enabled and this cannot be changed.", bucketName),
+			)
+		} else {
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Unable to Create S3 Bucket Versioning Configuration for %s", bucketName),
+				err.Error(),
+			)
+		}
 		return
 	}
 
@@ -164,10 +173,18 @@ func (r *S3BucketVersioningResource) Update(ctx context.Context, req resource.Up
 
 	err := r.client.UpdateS3BucketVersioning(bucketName, versioningEnabled, versioningSuspended)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			fmt.Sprintf("Unable to Update S3 Bucket Versioning Configuration for %s", bucketName),
-			err.Error(),
-		)
+		// Check if this is a conflict due to object lock being enabled
+		if strings.Contains(err.Error(), "Object Lock configuration is present") {
+			resp.Diagnostics.AddError(
+				"Cannot Modify Versioning on Object Lock Enabled Bucket",
+				fmt.Sprintf("Bucket %s has object lock enabled. When object lock is enabled, versioning cannot be modified. Object lock requires versioning to be enabled and this cannot be changed.", bucketName),
+			)
+		} else {
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Unable to Update S3 Bucket Versioning Configuration for %s", bucketName),
+				err.Error(),
+			)
+		}
 		return
 	}
 

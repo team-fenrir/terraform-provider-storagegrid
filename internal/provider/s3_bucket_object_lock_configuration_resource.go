@@ -162,9 +162,17 @@ func (r *S3BucketObjectLockConfigurationResource) Create(ctx context.Context, re
 	var defaultRetentionSetting *utils.DefaultRetentionSetting
 	if plan.DefaultRetentionSetting != nil {
 		defaultRetentionSetting = &utils.DefaultRetentionSetting{
-			Mode:  plan.DefaultRetentionSetting.Mode.ValueString(),
-			Days:  int(plan.DefaultRetentionSetting.Days.ValueInt64()),
-			Years: int(plan.DefaultRetentionSetting.Years.ValueInt64()),
+			Mode: plan.DefaultRetentionSetting.Mode.ValueString(),
+		}
+
+		// Only set days OR years, not both - StorageGrid requires exactly one
+		days := int(plan.DefaultRetentionSetting.Days.ValueInt64())
+		years := int(plan.DefaultRetentionSetting.Years.ValueInt64())
+
+		if years > 0 {
+			defaultRetentionSetting.Years = years
+		} else {
+			defaultRetentionSetting.Days = days
 		}
 	}
 
@@ -234,9 +242,17 @@ func (r *S3BucketObjectLockConfigurationResource) Update(ctx context.Context, re
 	var defaultRetentionSetting *utils.DefaultRetentionSetting
 	if plan.DefaultRetentionSetting != nil {
 		defaultRetentionSetting = &utils.DefaultRetentionSetting{
-			Mode:  plan.DefaultRetentionSetting.Mode.ValueString(),
-			Days:  int(plan.DefaultRetentionSetting.Days.ValueInt64()),
-			Years: int(plan.DefaultRetentionSetting.Years.ValueInt64()),
+			Mode: plan.DefaultRetentionSetting.Mode.ValueString(),
+		}
+
+		// Only set days OR years, not both - StorageGrid requires exactly one
+		days := int(plan.DefaultRetentionSetting.Days.ValueInt64())
+		years := int(plan.DefaultRetentionSetting.Years.ValueInt64())
+
+		if years > 0 {
+			defaultRetentionSetting.Years = years
+		} else {
+			defaultRetentionSetting.Days = days
 		}
 	}
 
