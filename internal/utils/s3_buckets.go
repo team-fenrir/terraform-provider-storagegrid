@@ -373,3 +373,41 @@ func (c *Client) UpdateS3BucketVersioning(bucketName string, versioningEnabled, 
 
 	return nil
 }
+
+// S3BucketObjectLockAPIResponse represents the API response structure for bucket object lock
+type S3BucketObjectLockAPIResponse struct {
+	ResponseTime string                 `json:"responseTime"`
+	Status       string                 `json:"status"`
+	APIVersion   string                 `json:"apiVersion"`
+	Deprecated   bool                   `json:"deprecated"`
+	Data         S3BucketObjectLockData `json:"data"`
+}
+
+// S3BucketObjectLockData represents the object lock configuration for an S3 bucket
+type S3BucketObjectLockData struct {
+	Enabled                 bool                     `json:"enabled"`
+	DefaultRetentionSetting *DefaultRetentionSetting `json:"defaultRetentionSetting,omitempty"`
+}
+
+// GetS3BucketObjectLock retrieves object lock configuration for a specific S3 bucket
+func (c *Client) GetS3BucketObjectLock(bucketName string) (*S3BucketObjectLockData, error) {
+	url := fmt.Sprintf("%s/api/v4/org/containers/%s/object-lock", c.EndpointURL, bucketName)
+	log.Printf("Executing GET request to URL: %s", url)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error creating request: %w", err)
+	}
+
+	body, err := c.doRequest(req)
+	if err != nil {
+		return nil, fmt.Errorf("error executing request: %w", err)
+	}
+
+	var apiResponse S3BucketObjectLockAPIResponse
+	if err := json.Unmarshal(body, &apiResponse); err != nil {
+		return nil, fmt.Errorf("error unmarshalling S3 bucket object lock response: %w", err)
+	}
+
+	return &apiResponse.Data, nil
+}

@@ -231,6 +231,7 @@ func (p *StorageGridProvider) DataSources(ctx context.Context) []func() datasour
 		NewUserDataSource,
 		NewS3BucketDataSource,
 		NewS3BucketVersioningDataSource,
+		NewS3BucketObjectLockConfigurationDataSource,
 	}
 }
 
