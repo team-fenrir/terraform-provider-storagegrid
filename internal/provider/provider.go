@@ -224,6 +224,7 @@ func (p *StorageGridProvider) Resources(_ context.Context) []func() resource.Res
 		NewS3BucketResource,
 		NewS3BucketVersioningResource,
 		NewS3BucketObjectLockConfigurationResource,
+		NewS3BucketLifecycleConfigurationResource,
 	}
 }
 func (p *StorageGridProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
@@ -233,6 +234,7 @@ func (p *StorageGridProvider) DataSources(ctx context.Context) []func() datasour
 		NewS3BucketDataSource,
 		NewS3BucketVersioningDataSource,
 		NewS3BucketObjectLockConfigurationDataSource,
+		NewS3BucketLifecycleConfigurationDataSource,
 	}
 }
 

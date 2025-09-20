@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"log"
 	"net"
@@ -528,6 +529,116 @@ func (c *Client) UpdateS3BucketObjectLock(bucketName string, enabled bool, defau
 
 	if apiResponse.Status != "success" {
 		return fmt.Errorf("bucket object lock update failed with status: %s", apiResponse.Status)
+	}
+
+	return nil
+}
+
+// S3 Lifecycle Configuration structures for XML marshalling/unmarshalling
+
+// LifecycleConfiguration represents the root lifecycle configuration
+type LifecycleConfiguration struct {
+	XMLName xml.Name `xml:"LifecycleConfiguration"`
+	Rules   []Rule   `xml:"Rule"`
+}
+
+// Rule represents a lifecycle rule
+type Rule struct {
+	ID                          string                       `xml:"ID,omitempty"`
+	Status                      string                       `xml:"Status"`
+	Filter                      *Filter                      `xml:"Filter,omitempty"`
+	Expiration                  *Expiration                  `xml:"Expiration,omitempty"`
+	NoncurrentVersionExpiration *NoncurrentVersionExpiration `xml:"NoncurrentVersionExpiration,omitempty"`
+}
+
+// Filter represents the filter for a lifecycle rule
+type Filter struct {
+	Prefix string `xml:"Prefix,omitempty"`
+}
+
+// Expiration represents expiration settings for current versions
+type Expiration struct {
+	Days int    `xml:"Days,omitempty"`
+	Date string `xml:"Date,omitempty"`
+}
+
+// NoncurrentVersionExpiration represents expiration settings for noncurrent versions
+type NoncurrentVersionExpiration struct {
+	NoncurrentDays int `xml:"NoncurrentDays,omitempty"`
+}
+
+// getS3EndpointURL converts the management endpoint to S3 endpoint (port 10443)
+func (c *Client) getS3EndpointURL() string {
+	// TODO: Make this configurable later - hardcoded for testing
+	return strings.Replace(c.EndpointURL, ":8443", ":10443", 1)
+}
+
+// GetS3BucketLifecycleConfiguration retrieves lifecycle configuration for a specific S3 bucket
+func (c *Client) GetS3BucketLifecycleConfiguration(bucketName string) (*LifecycleConfiguration, error) {
+	s3Endpoint := c.getS3EndpointURL()
+	url := fmt.Sprintf("%s/%s?lifecycle", s3Endpoint, bucketName)
+	log.Printf("Executing GET request to URL: %s", url)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error creating request: %w", err)
+	}
+
+	body, err := c.doRequest(req)
+	if err != nil {
+		return nil, fmt.Errorf("error executing request: %w", err)
+	}
+
+	var lifecycleConfig LifecycleConfiguration
+	if err := xml.Unmarshal(body, &lifecycleConfig); err != nil {
+		return nil, fmt.Errorf("error unmarshalling S3 bucket lifecycle configuration response: %w", err)
+	}
+
+	return &lifecycleConfig, nil
+}
+
+// PutS3BucketLifecycleConfiguration sets lifecycle configuration for a specific S3 bucket
+func (c *Client) PutS3BucketLifecycleConfiguration(bucketName string, lifecycleConfig *LifecycleConfiguration) error {
+	s3Endpoint := c.getS3EndpointURL()
+	url := fmt.Sprintf("%s/%s?lifecycle", s3Endpoint, bucketName)
+	log.Printf("Executing PUT request to URL: %s", url)
+
+	requestBody, err := xml.Marshal(lifecycleConfig)
+	if err != nil {
+		return fmt.Errorf("error marshalling lifecycle configuration: %w", err)
+	}
+
+	log.Printf("Request body: %s", string(requestBody))
+
+	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return fmt.Errorf("error creating PUT request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/xml")
+
+	_, err = c.doRequest(req)
+	if err != nil {
+		return fmt.Errorf("error executing PUT request: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteS3BucketLifecycleConfiguration deletes lifecycle configuration for a specific S3 bucket
+func (c *Client) DeleteS3BucketLifecycleConfiguration(bucketName string) error {
+	s3Endpoint := c.getS3EndpointURL()
+	url := fmt.Sprintf("%s/%s?lifecycle", s3Endpoint, bucketName)
+	log.Printf("Executing DELETE request to URL: %s", url)
+
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return fmt.Errorf("error creating DELETE request: %w", err)
+	}
+
+	_, err = c.doRequest(req)
+	if err != nil {
+		return fmt.Errorf("error executing DELETE request: %w", err)
 	}
 
 	return nil

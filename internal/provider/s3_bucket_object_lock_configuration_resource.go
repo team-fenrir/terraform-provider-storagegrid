@@ -37,10 +37,10 @@ type S3BucketObjectLockConfigurationResource struct {
 
 // S3BucketObjectLockConfigurationResourceModel describes the resource data model.
 type S3BucketObjectLockConfigurationResourceModel struct {
-	BucketName              types.String                               `tfsdk:"bucket_name"`
-	Enabled                 types.Bool                                 `tfsdk:"enabled"`
-	DefaultRetentionSetting *DefaultRetentionSettingResourceModel     `tfsdk:"default_retention_setting"`
-	ID                      types.String                               `tfsdk:"id"`
+	BucketName              types.String                          `tfsdk:"bucket_name"`
+	Enabled                 types.Bool                            `tfsdk:"enabled"`
+	DefaultRetentionSetting *DefaultRetentionSettingResourceModel `tfsdk:"default_retention_setting"`
+	ID                      types.String                          `tfsdk:"id"`
 }
 
 // DefaultRetentionSettingResourceModel represents default retention settings for the resource
@@ -71,9 +71,9 @@ func (r *S3BucketObjectLockConfigurationResource) Schema(ctx context.Context, re
 				Description: "Whether object lock is enabled for the bucket. " +
 					"NOTE: Can only be set to true if the bucket was created with object_lock_enabled=true. " +
 					"Cannot enable object lock on existing buckets that don't have it.",
-				Optional:    true,
-				Computed:    true,
-				Default:     booldefault.StaticBool(false),
+				Optional: true,
+				Computed: true,
+				Default:  booldefault.StaticBool(false),
 			},
 			"id": schema.StringAttribute{
 				Description: "The unique identifier for the object lock configuration (same as bucket_name).",
