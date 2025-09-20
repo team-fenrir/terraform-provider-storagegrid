@@ -580,8 +580,8 @@ type S3AccessKeyResponse struct {
 	Data         s3AccessKey `json:"data"`
 }
 
-// getS3EndpointURL converts the management endpoint to S3 endpoint (port 10443)
-func (c *Client) getS3EndpointURL() string {
+// GetS3EndpointURL converts the management endpoint to S3 endpoint (port 10443)
+func (c *Client) GetS3EndpointURL() string {
 	// TODO: Make this configurable later - hardcoded for testing
 	return strings.Replace(c.EndpointURL, ":9443", ":10443", 1)
 }
@@ -637,8 +637,8 @@ func (c *Client) deleteAccessKey(accessKeyID string) error {
 	return nil
 }
 
-// getS3Client returns a cached MinIO client, creating it if necessary
-func (c *Client) getS3Client() (*minio.Client, error) {
+// GetS3Client returns a cached MinIO client, creating it if necessary
+func (c *Client) GetS3Client() (*minio.Client, error) {
 	// Return cached client if available
 	if c.s3Client != nil {
 		return c.s3Client, nil
@@ -651,7 +651,7 @@ func (c *Client) getS3Client() (*minio.Client, error) {
 	}
 
 	// Parse S3 endpoint
-	s3EndpointURL := c.getS3EndpointURL()
+	s3EndpointURL := c.GetS3EndpointURL()
 	parsedURL, err := url.Parse(s3EndpointURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse S3 endpoint URL: %w", err)
@@ -687,7 +687,7 @@ func (c *Client) clearS3ClientCache() {
 
 // executeS3Operation executes an S3 operation with retry on authentication failure
 func (c *Client) executeS3Operation(operation func(*minio.Client) error) error {
-	client, err := c.getS3Client()
+	client, err := c.GetS3Client()
 	if err != nil {
 		return fmt.Errorf("failed to get S3 client: %w", err)
 	}
@@ -706,7 +706,7 @@ func (c *Client) executeS3Operation(operation func(*minio.Client) error) error {
 
 			// Clear cache and retry once
 			c.clearS3ClientCache()
-			client, retryErr := c.getS3Client()
+			client, retryErr := c.GetS3Client()
 			if retryErr != nil {
 				return fmt.Errorf("failed to refresh S3 client after auth error: %w", retryErr)
 			}
@@ -726,6 +726,11 @@ func (c *Client) executeS3Operation(operation func(*minio.Client) error) error {
 func (c *Client) CleanupS3Client() {
 	c.clearS3ClientCache()
 	log.Printf("Cleaned up S3 client and deleted temporary access key")
+}
+
+// GetS3AccessKey returns the current S3 access key (for debugging)
+func (c *Client) GetS3AccessKey() *s3AccessKey {
+	return c.s3AccessKey
 }
 
 // GetS3BucketLifecycleConfiguration retrieves lifecycle configuration for a specific S3 bucket
