@@ -10,6 +10,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/minio/minio-go/v7"
 )
 
 // Client holds the client configuration.
@@ -28,6 +30,17 @@ type Client struct {
 	// to prevent race conditions where multiple goroutines fetch/update cache simultaneously.
 	bucketCache     []S3BucketData
 	bucketCacheTime time.Time
+
+	// S3 client cache for lifecycle operations
+	s3Client    *minio.Client
+	s3AccessKey *s3AccessKey
+}
+
+// s3AccessKey represents temporary access keys for S3 operations
+type s3AccessKey struct {
+	AccessKey string `json:"accessKey"`
+	SecretKey string `json:"secretKey"`
+	ID        string `json:"id"`
 }
 
 // SignInBody represents the request body for the authentication request.

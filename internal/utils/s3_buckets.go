@@ -12,9 +12,13 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 // S3BucketAPIResponse represents the API response structure for S3 bucket data.
@@ -567,10 +571,159 @@ type NoncurrentVersionExpiration struct {
 	NoncurrentDays int `xml:"NoncurrentDays,omitempty"`
 }
 
+// S3AccessKeyResponse represents the API response for access key creation
+type S3AccessKeyResponse struct {
+	ResponseTime string       `json:"responseTime"`
+	Status       string       `json:"status"`
+	APIVersion   string       `json:"apiVersion"`
+	Data         s3AccessKey  `json:"data"`
+}
+
 // getS3EndpointURL converts the management endpoint to S3 endpoint (port 10443)
 func (c *Client) getS3EndpointURL() string {
 	// TODO: Make this configurable later - hardcoded for testing
 	return strings.Replace(c.EndpointURL, ":9443", ":10443", 1)
+}
+
+// createTemporaryAccessKey creates a temporary access key for S3 operations
+func (c *Client) createTemporaryAccessKey() (*s3AccessKey, error) {
+	url := fmt.Sprintf("%s/api/v4/org/users/current-user/s3-access-keys", c.EndpointURL)
+	log.Printf("Creating temporary access key via URL: %s", url)
+
+	// Create request body for temporary access key
+	requestBody := []byte(`{"expires": "2024-12-31T23:59:59.000Z"}`) // Set expiration
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return nil, fmt.Errorf("error creating access key request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	body, err := c.doRequest(req)
+	if err != nil {
+		return nil, fmt.Errorf("error executing access key request: %w", err)
+	}
+
+	var response S3AccessKeyResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("error unmarshalling access key response: %w", err)
+	}
+
+	if response.Status != "success" {
+		return nil, fmt.Errorf("access key creation failed with status: %s", response.Status)
+	}
+
+	return &response.Data, nil
+}
+
+// deleteAccessKey deletes a temporary access key
+func (c *Client) deleteAccessKey(accessKeyID string) error {
+	url := fmt.Sprintf("%s/api/v4/org/users/current-user/s3-access-keys/%s", c.EndpointURL, accessKeyID)
+	log.Printf("Deleting access key via URL: %s", url)
+
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return fmt.Errorf("error creating delete access key request: %w", err)
+	}
+
+	_, err = c.doRequest(req)
+	if err != nil {
+		return fmt.Errorf("error executing delete access key request: %w", err)
+	}
+
+	return nil
+}
+
+// getS3Client returns a cached MinIO client, creating it if necessary
+func (c *Client) getS3Client() (*minio.Client, error) {
+	// Return cached client if available
+	if c.s3Client != nil {
+		return c.s3Client, nil
+	}
+
+	// Create temporary access key
+	accessKey, err := c.createTemporaryAccessKey()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temporary access key: %w", err)
+	}
+
+	// Parse S3 endpoint
+	s3EndpointURL := c.getS3EndpointURL()
+	parsedURL, err := url.Parse(s3EndpointURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse S3 endpoint URL: %w", err)
+	}
+
+	// Create MinIO client
+	minioClient, err := minio.New(parsedURL.Host, &minio.Options{
+		Creds:  credentials.NewStaticV4(accessKey.AccessKey, accessKey.SecretKey, ""),
+		Secure: parsedURL.Scheme == "https",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create MinIO client: %w", err)
+	}
+
+	// Cache the client and access key
+	c.s3Client = minioClient
+	c.s3AccessKey = accessKey
+
+	log.Printf("Created and cached S3 client with temporary access key")
+	return c.s3Client, nil
+}
+
+// clearS3ClientCache clears the S3 client cache and deletes the access key
+func (c *Client) clearS3ClientCache() {
+	if c.s3AccessKey != nil {
+		if err := c.deleteAccessKey(c.s3AccessKey.ID); err != nil {
+			log.Printf("Warning: failed to delete temporary access key: %v", err)
+		}
+	}
+	c.s3Client = nil
+	c.s3AccessKey = nil
+}
+
+// executeS3Operation executes an S3 operation with retry on authentication failure
+func (c *Client) executeS3Operation(operation func(*minio.Client) error) error {
+	client, err := c.getS3Client()
+	if err != nil {
+		return fmt.Errorf("failed to get S3 client: %w", err)
+	}
+
+	// Try the operation
+	err = operation(client)
+	if err != nil {
+		// Check if it's an authentication/authorization error that might indicate expired session
+		errStr := err.Error()
+		if strings.Contains(errStr, "AccessDenied") ||
+		   strings.Contains(errStr, "InvalidAccessKey") ||
+		   strings.Contains(errStr, "TokenRefreshRequired") ||
+		   strings.Contains(errStr, "ExpiredToken") {
+
+			log.Printf("S3 operation failed with auth error, clearing cache and retrying: %v", err)
+
+			// Clear cache and retry once
+			c.clearS3ClientCache()
+			client, retryErr := c.getS3Client()
+			if retryErr != nil {
+				return fmt.Errorf("failed to refresh S3 client after auth error: %w", retryErr)
+			}
+
+			// Retry the operation
+			if retryErr := operation(client); retryErr != nil {
+				return fmt.Errorf("S3 operation failed after retry: %w", retryErr)
+			}
+			return nil
+		}
+	}
+
+	return err
+}
+
+// CleanupS3Client cleans up the cached S3 client and deletes the temporary access key
+func (c *Client) CleanupS3Client() {
+	c.clearS3ClientCache()
+	log.Printf("Cleaned up S3 client and deleted temporary access key")
 }
 
 // GetS3BucketLifecycleConfiguration retrieves lifecycle configuration for a specific S3 bucket
