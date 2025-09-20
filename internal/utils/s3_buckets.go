@@ -615,10 +615,7 @@ func (c *Client) createTemporaryAccessKey() (*s3AccessKey, error) {
 		return nil, fmt.Errorf("error unmarshalling access key response: %w", err)
 	}
 
-	// Debug: log the raw response
-	log.Printf("Access key response: %s", string(body))
-	log.Printf("Parsed access key: AccessKey=%s, SecretKey=%s, ID=%s",
-		response.Data.AccessKey, response.Data.SecretKey, response.Data.ID)
+	// Access key created successfully
 
 	if response.Status != "success" {
 		return nil, fmt.Errorf("access key creation failed with status: %s", response.Status)
