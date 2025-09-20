@@ -19,6 +19,7 @@ import (
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/minio/minio-go/v7/pkg/lifecycle"
 )
 
 // S3BucketAPIResponse represents the API response structure for S3 bucket data.
@@ -573,10 +574,10 @@ type NoncurrentVersionExpiration struct {
 
 // S3AccessKeyResponse represents the API response for access key creation
 type S3AccessKeyResponse struct {
-	ResponseTime string       `json:"responseTime"`
-	Status       string       `json:"status"`
-	APIVersion   string       `json:"apiVersion"`
-	Data         s3AccessKey  `json:"data"`
+	ResponseTime string      `json:"responseTime"`
+	Status       string      `json:"status"`
+	APIVersion   string      `json:"apiVersion"`
+	Data         s3AccessKey `json:"data"`
 }
 
 // getS3EndpointURL converts the management endpoint to S3 endpoint (port 10443)
@@ -696,9 +697,9 @@ func (c *Client) executeS3Operation(operation func(*minio.Client) error) error {
 		// Check if it's an authentication/authorization error that might indicate expired session
 		errStr := err.Error()
 		if strings.Contains(errStr, "AccessDenied") ||
-		   strings.Contains(errStr, "InvalidAccessKey") ||
-		   strings.Contains(errStr, "TokenRefreshRequired") ||
-		   strings.Contains(errStr, "ExpiredToken") {
+			strings.Contains(errStr, "InvalidAccessKey") ||
+			strings.Contains(errStr, "TokenRefreshRequired") ||
+			strings.Contains(errStr, "ExpiredToken") {
 
 			log.Printf("S3 operation failed with auth error, clearing cache and retrying: %v", err)
 
@@ -728,71 +729,134 @@ func (c *Client) CleanupS3Client() {
 
 // GetS3BucketLifecycleConfiguration retrieves lifecycle configuration for a specific S3 bucket
 func (c *Client) GetS3BucketLifecycleConfiguration(bucketName string) (*LifecycleConfiguration, error) {
-	s3Endpoint := c.getS3EndpointURL()
-	url := fmt.Sprintf("%s/%s?lifecycle", s3Endpoint, bucketName)
-	log.Printf("Executing GET request to URL: %s", url)
+	var result *LifecycleConfiguration
+	var operationErr error
 
-	req, err := http.NewRequest("GET", url, nil)
+	err := c.executeS3Operation(func(client *minio.Client) error {
+		log.Printf("Getting lifecycle configuration for bucket: %s", bucketName)
+
+		// Get lifecycle configuration using MinIO client
+		lifecycle, err := client.GetBucketLifecycle(context.Background(), bucketName)
+		if err != nil {
+			return fmt.Errorf("error getting bucket lifecycle configuration: %w", err)
+		}
+
+		// Convert MinIO lifecycle to our struct
+		lifecycleConfig := &LifecycleConfiguration{
+			Rules: make([]Rule, len(lifecycle.Rules)),
+		}
+
+		for i, rule := range lifecycle.Rules {
+			lifecycleRule := Rule{
+				ID:     rule.ID,
+				Status: rule.Status,
+			}
+
+			// Handle filter
+			if rule.RuleFilter.Prefix != "" {
+				lifecycleRule.Filter = &Filter{
+					Prefix: rule.RuleFilter.Prefix,
+				}
+			}
+
+			// Handle expiration
+			if rule.Expiration.Days > 0 || !rule.Expiration.Date.Time.IsZero() {
+				lifecycleRule.Expiration = &Expiration{}
+				if rule.Expiration.Days > 0 {
+					lifecycleRule.Expiration.Days = int(rule.Expiration.Days)
+				}
+				if !rule.Expiration.Date.Time.IsZero() {
+					lifecycleRule.Expiration.Date = rule.Expiration.Date.Time.Format("2006-01-02T15:04:05.000Z")
+				}
+			}
+
+			// Handle noncurrent version expiration
+			if rule.NoncurrentVersionExpiration.NoncurrentDays > 0 {
+				lifecycleRule.NoncurrentVersionExpiration = &NoncurrentVersionExpiration{
+					NoncurrentDays: int(rule.NoncurrentVersionExpiration.NoncurrentDays),
+				}
+			}
+
+			lifecycleConfig.Rules[i] = lifecycleRule
+		}
+
+		result = lifecycleConfig
+		return nil
+	})
+
 	if err != nil {
-		return nil, fmt.Errorf("error creating request: %w", err)
+		return nil, err
+	}
+	if operationErr != nil {
+		return nil, operationErr
 	}
 
-	body, err := c.doRequest(req)
-	if err != nil {
-		return nil, fmt.Errorf("error executing request: %w", err)
-	}
-
-	var lifecycleConfig LifecycleConfiguration
-	if err := xml.Unmarshal(body, &lifecycleConfig); err != nil {
-		return nil, fmt.Errorf("error unmarshalling S3 bucket lifecycle configuration response: %w", err)
-	}
-
-	return &lifecycleConfig, nil
+	return result, nil
 }
 
 // PutS3BucketLifecycleConfiguration sets lifecycle configuration for a specific S3 bucket
 func (c *Client) PutS3BucketLifecycleConfiguration(bucketName string, lifecycleConfig *LifecycleConfiguration) error {
-	s3Endpoint := c.getS3EndpointURL()
-	url := fmt.Sprintf("%s/%s?lifecycle", s3Endpoint, bucketName)
-	log.Printf("Executing PUT request to URL: %s", url)
+	return c.executeS3Operation(func(client *minio.Client) error {
+		log.Printf("Setting lifecycle configuration for bucket: %s", bucketName)
 
-	requestBody, err := xml.Marshal(lifecycleConfig)
-	if err != nil {
-		return fmt.Errorf("error marshalling lifecycle configuration: %w", err)
-	}
+		// Convert our struct to MinIO lifecycle format using the proper lifecycle package
+		config := lifecycle.NewConfiguration()
+		config.Rules = make([]lifecycle.Rule, len(lifecycleConfig.Rules))
 
-	log.Printf("Request body: %s", string(requestBody))
+		for i, rule := range lifecycleConfig.Rules {
+			minioRule := lifecycle.Rule{
+				ID:     rule.ID,
+				Status: rule.Status,
+			}
 
-	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(requestBody))
-	if err != nil {
-		return fmt.Errorf("error creating PUT request: %w", err)
-	}
+			// Handle filter
+			if rule.Filter != nil {
+				minioRule.RuleFilter = lifecycle.Filter{
+					Prefix: rule.Filter.Prefix,
+				}
+			}
 
-	req.Header.Set("Content-Type", "application/xml")
+			// Handle expiration
+			if rule.Expiration != nil {
+				if rule.Expiration.Days > 0 {
+					minioRule.Expiration.Days = lifecycle.ExpirationDays(rule.Expiration.Days)
+				}
+				if rule.Expiration.Date != "" {
+					if date, err := time.Parse("2006-01-02T15:04:05.000Z", rule.Expiration.Date); err == nil {
+						minioRule.Expiration.Date = lifecycle.ExpirationDate{Time: date}
+					}
+				}
+			}
 
-	_, err = c.doRequest(req)
-	if err != nil {
-		return fmt.Errorf("error executing PUT request: %w", err)
-	}
+			// Handle noncurrent version expiration
+			if rule.NoncurrentVersionExpiration != nil {
+				minioRule.NoncurrentVersionExpiration.NoncurrentDays = lifecycle.ExpirationDays(rule.NoncurrentVersionExpiration.NoncurrentDays)
+			}
 
-	return nil
+			config.Rules[i] = minioRule
+		}
+
+		// Set lifecycle configuration using MinIO client
+		err := client.SetBucketLifecycle(context.Background(), bucketName, config)
+		if err != nil {
+			return fmt.Errorf("error setting bucket lifecycle configuration: %w", err)
+		}
+
+		return nil
+	})
 }
 
 // DeleteS3BucketLifecycleConfiguration deletes lifecycle configuration for a specific S3 bucket
 func (c *Client) DeleteS3BucketLifecycleConfiguration(bucketName string) error {
-	s3Endpoint := c.getS3EndpointURL()
-	url := fmt.Sprintf("%s/%s?lifecycle", s3Endpoint, bucketName)
-	log.Printf("Executing DELETE request to URL: %s", url)
+	return c.executeS3Operation(func(client *minio.Client) error {
+		log.Printf("Deleting lifecycle configuration for bucket: %s", bucketName)
 
-	req, err := http.NewRequest("DELETE", url, nil)
-	if err != nil {
-		return fmt.Errorf("error creating DELETE request: %w", err)
-	}
+		// Remove lifecycle configuration using MinIO client
+		err := client.SetBucketLifecycle(context.Background(), bucketName, lifecycle.NewConfiguration())
+		if err != nil {
+			return fmt.Errorf("error removing bucket lifecycle configuration: %w", err)
+		}
 
-	_, err = c.doRequest(req)
-	if err != nil {
-		return fmt.Errorf("error executing DELETE request: %w", err)
-	}
-
-	return nil
+		return nil
+	})
 }
