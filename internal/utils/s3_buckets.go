@@ -570,7 +570,7 @@ type NoncurrentVersionExpiration struct {
 // getS3EndpointURL converts the management endpoint to S3 endpoint (port 10443)
 func (c *Client) getS3EndpointURL() string {
 	// TODO: Make this configurable later - hardcoded for testing
-	return strings.Replace(c.EndpointURL, ":8443", ":10443", 1)
+	return strings.Replace(c.EndpointURL, ":9443", ":10443", 1)
 }
 
 // GetS3BucketLifecycleConfiguration retrieves lifecycle configuration for a specific S3 bucket
