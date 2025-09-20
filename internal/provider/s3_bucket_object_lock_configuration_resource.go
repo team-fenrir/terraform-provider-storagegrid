@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -279,15 +280,33 @@ func (r *S3BucketObjectLockConfigurationResource) Delete(ctx context.Context, re
 
 	bucketName := state.BucketName.ValueString()
 
-	// When deleting object lock configuration, disable object lock
-	// but keep default retention settings intact
+	// When deleting object lock configuration, try to disable object lock
+	// but if that fails (which it often does), just clear default retention settings
 	err := r.client.UpdateS3BucketObjectLock(bucketName, false, nil)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			fmt.Sprintf("Unable to Delete S3 Bucket Object Lock Configuration for %s", bucketName),
-			err.Error(),
-		)
-		return
+		// Check if this is specifically an "Invalid ObjectLockEnabled value" error
+		if strings.Contains(err.Error(), "Invalid ObjectLockEnabled value") {
+			// Try to just clear the default retention settings instead
+			err2 := r.client.UpdateS3BucketObjectLock(bucketName, true, nil)
+			if err2 != nil {
+				resp.Diagnostics.AddWarning(
+					"Cannot Disable Object Lock",
+					fmt.Sprintf("Object lock cannot be disabled on bucket %s once enabled. The object lock configuration resource has been removed from Terraform state, but object lock will remain enabled on the bucket with no default retention settings.", bucketName),
+				)
+			} else {
+				resp.Diagnostics.AddWarning(
+					"Object Lock Remains Enabled",
+					fmt.Sprintf("Object lock cannot be disabled on bucket %s once enabled. Default retention settings have been cleared, but object lock remains active.", bucketName),
+				)
+			}
+			// Continue with the delete - state will be cleared automatically
+		} else {
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Unable to Delete S3 Bucket Object Lock Configuration for %s", bucketName),
+				err.Error(),
+			)
+			return
+		}
 	}
 
 	// State is automatically cleared on successful delete

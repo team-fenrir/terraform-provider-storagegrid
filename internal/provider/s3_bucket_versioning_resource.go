@@ -207,11 +207,21 @@ func (r *S3BucketVersioningResource) Delete(ctx context.Context, req resource.De
 	// requires at least one of them to be true
 	err := r.client.UpdateS3BucketVersioning(bucketName, false, true)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			fmt.Sprintf("Unable to Delete S3 Bucket Versioning Configuration for %s", bucketName),
-			err.Error(),
-		)
-		return
+		// Check if this is a conflict due to object lock being enabled
+		if strings.Contains(err.Error(), "Object Lock configuration is present") {
+			// Add a warning but don't fail the delete operation
+			resp.Diagnostics.AddWarning(
+				"Cannot Modify Versioning on Object Lock Enabled Bucket",
+				fmt.Sprintf("Bucket %s has object lock enabled. Versioning state cannot be changed when object lock is present. The versioning configuration resource has been removed from Terraform state, but the bucket will retain its current versioning settings.", bucketName),
+			)
+			// Continue with the delete - state will be cleared automatically
+		} else {
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Unable to Delete S3 Bucket Versioning Configuration for %s", bucketName),
+				err.Error(),
+			)
+			return
+		}
 	}
 
 	// State is automatically cleared on successful delete
