@@ -583,7 +583,10 @@ type S3AccessKeyResponse struct {
 // GetS3EndpointURL converts the management endpoint to S3 endpoint (port 10443)
 func (c *Client) GetS3EndpointURL() string {
 	// TODO: Make this configurable later - hardcoded for testing
-	return strings.Replace(c.EndpointURL, ":9443", ":10443", 1)
+	// Replace port and remove /api/v4 path for S3 endpoint
+	s3URL := strings.Replace(c.EndpointURL, ":9443", ":10443", 1)
+	s3URL = strings.Replace(s3URL, "/api/v4", "", 1)
+	return s3URL
 }
 
 // createTemporaryAccessKey creates a temporary access key for S3 operations

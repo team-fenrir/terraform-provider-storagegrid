@@ -39,7 +39,7 @@ type Client struct {
 // s3AccessKey represents temporary access keys for S3 operations
 type s3AccessKey struct {
 	AccessKey string `json:"accessKey"`
-	SecretKey string `json:"secretKey"`
+	SecretKey string `json:"secretAccessKey"`  // Fixed: API returns "secretAccessKey" not "secretKey"
 	ID        string `json:"id"`
 }
 
