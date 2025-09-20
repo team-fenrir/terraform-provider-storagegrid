@@ -591,8 +591,9 @@ func (c *Client) createTemporaryAccessKey() (*s3AccessKey, error) {
 	url := fmt.Sprintf("%s/api/v4/org/users/current-user/s3-access-keys", c.EndpointURL)
 	log.Printf("Creating temporary access key via URL: %s", url)
 
-	// Create request body for temporary access key
-	requestBody := []byte(`{"expires": "2024-12-31T23:59:59.000Z"}`) // Set expiration
+	// Create request body for temporary access key with future expiration
+	expirationTime := time.Now().Add(24 * time.Hour) // Expire in 24 hours
+	requestBody := []byte(fmt.Sprintf(`{"expires": "%s"}`, expirationTime.Format("2006-01-02T15:04:05.000Z")))
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
 	if err != nil {
