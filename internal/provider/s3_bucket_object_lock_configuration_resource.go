@@ -165,7 +165,7 @@ func (r *S3BucketObjectLockConfigurationResource) Create(ctx context.Context, re
 		}
 	}
 
-	err := r.client.UpdateS3BucketObjectLock(bucketName, true, defaultRetentionSetting)
+	err = r.client.UpdateS3BucketObjectLock(bucketName, true, defaultRetentionSetting)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			fmt.Sprintf("Unable to Create S3 Bucket Object Lock Configuration for %s", bucketName),
