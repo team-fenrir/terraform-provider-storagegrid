@@ -1,0 +1,29 @@
+# Look up an existing user by user name
+data "storagegrid_user" "foo" {
+  user_name = "foo-user"
+}
+
+# Look up another existing user by user name
+data "storagegrid_user" "bar" {
+  user_name = "bar-user"
+}
+
+# Use the user data to create access keys
+resource "storagegrid_access_keys" "foo" {
+  user_id      = data.storagegrid_user.foo.unique_name
+  created_date = "2024-01-01T00:00:00Z"
+  expires      = "2025-12-31T23:59:59Z"
+}
+
+# Output user information
+output "foo_user_full_name" {
+  value = data.storagegrid_user.foo.full_name
+}
+
+output "foo_user_groups" {
+  value = data.storagegrid_user.foo.member_of
+}
+
+output "bar_user_disabled" {
+  value = data.storagegrid_user.bar.disable
+}
