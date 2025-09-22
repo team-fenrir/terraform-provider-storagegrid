@@ -11,7 +11,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
@@ -39,7 +38,6 @@ type S3BucketObjectLockConfigurationResource struct {
 // S3BucketObjectLockConfigurationResourceModel describes the resource data model.
 type S3BucketObjectLockConfigurationResourceModel struct {
 	BucketName              types.String                          `tfsdk:"bucket_name"`
-	Enabled                 types.Bool                            `tfsdk:"enabled"`
 	DefaultRetentionSetting *DefaultRetentionSettingResourceModel `tfsdk:"default_retention_setting"`
 	ID                      types.String                          `tfsdk:"id"`
 }
@@ -57,9 +55,9 @@ func (r *S3BucketObjectLockConfigurationResource) Metadata(ctx context.Context, 
 
 func (r *S3BucketObjectLockConfigurationResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Manages object lock configuration for a StorageGrid S3 bucket. " +
-			"NOTE: Object lock must be enabled at bucket creation time using the storagegrid_s3_bucket resource. " +
-			"This resource can only modify object lock settings on buckets that already have object lock enabled.",
+		Description: "Manages default retention settings for a StorageGrid S3 bucket with object lock enabled. " +
+			"NOTE: This resource can only be used on buckets that already have object lock enabled at creation time. " +
+			"Object lock must be enabled using the storagegrid_s3_bucket resource with object_lock_enabled=true.",
 		Attributes: map[string]schema.Attribute{
 			"bucket_name": schema.StringAttribute{
 				Description: "The name of the S3 bucket to configure object lock for.",
@@ -67,14 +65,6 @@ func (r *S3BucketObjectLockConfigurationResource) Schema(ctx context.Context, re
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
-			},
-			"enabled": schema.BoolAttribute{
-				Description: "Whether object lock is enabled for the bucket. " +
-					"NOTE: Can only be set to true if the bucket was created with object_lock_enabled=true. " +
-					"Cannot enable object lock on existing buckets that don't have it.",
-				Optional: true,
-				Computed: true,
-				Default:  booldefault.StaticBool(false),
 			},
 			"id": schema.StringAttribute{
 				Description: "The unique identifier for the object lock configuration (same as bucket_name).",
@@ -138,26 +128,24 @@ func (r *S3BucketObjectLockConfigurationResource) Create(ctx context.Context, re
 	}
 
 	bucketName := plan.BucketName.ValueString()
-	enabled := plan.Enabled.ValueBool()
 
-	// Check if we're trying to enable object lock on a bucket that doesn't have it
-	if enabled {
-		currentObjectLock, err := r.client.GetS3BucketObjectLock(bucketName)
-		if err != nil {
-			resp.Diagnostics.AddError(
-				fmt.Sprintf("Unable to Check Current Object Lock Status for %s", bucketName),
-				err.Error(),
-			)
-			return
-		}
+	// Get current object lock status to validate this resource can be applied
+	currentObjectLock, err := r.client.GetS3BucketObjectLock(bucketName)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			fmt.Sprintf("Unable to Check Current Object Lock Status for %s", bucketName),
+			err.Error(),
+		)
+		return
+	}
 
-		if !currentObjectLock.Enabled {
-			resp.Diagnostics.AddError(
-				"Cannot Enable Object Lock on Existing Bucket",
-				fmt.Sprintf("Bucket %s does not have object lock enabled. Object lock must be enabled at bucket creation time using the storagegrid_s3_bucket resource with object_lock_enabled=true. This resource can only modify object lock settings on buckets that already have object lock enabled.", bucketName),
-			)
-			return
-		}
+	// Validate that object lock is actually enabled on the bucket
+	if !currentObjectLock.Enabled {
+		resp.Diagnostics.AddError(
+			"Object Lock Not Enabled on Bucket",
+			fmt.Sprintf("Bucket %s does not have object lock enabled. Object lock must be enabled at bucket creation time using the storagegrid_s3_bucket resource with object_lock_enabled=true. This resource can only be used on buckets that already have object lock enabled.", bucketName),
+		)
+		return
 	}
 
 	var defaultRetentionSetting *utils.DefaultRetentionSetting
@@ -177,7 +165,7 @@ func (r *S3BucketObjectLockConfigurationResource) Create(ctx context.Context, re
 		}
 	}
 
-	err := r.client.UpdateS3BucketObjectLock(bucketName, enabled, defaultRetentionSetting)
+	err := r.client.UpdateS3BucketObjectLock(bucketName, true, defaultRetentionSetting)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			fmt.Sprintf("Unable to Create S3 Bucket Object Lock Configuration for %s", bucketName),
@@ -212,7 +200,6 @@ func (r *S3BucketObjectLockConfigurationResource) Read(ctx context.Context, req 
 	}
 
 	// Update state with current values
-	state.Enabled = types.BoolValue(objectLock.Enabled)
 	state.ID = types.StringValue(bucketName)
 
 	// Handle default retention setting
@@ -238,7 +225,6 @@ func (r *S3BucketObjectLockConfigurationResource) Update(ctx context.Context, re
 	}
 
 	bucketName := plan.BucketName.ValueString()
-	enabled := plan.Enabled.ValueBool()
 
 	var defaultRetentionSetting *utils.DefaultRetentionSetting
 	if plan.DefaultRetentionSetting != nil {
@@ -257,7 +243,7 @@ func (r *S3BucketObjectLockConfigurationResource) Update(ctx context.Context, re
 		}
 	}
 
-	err := r.client.UpdateS3BucketObjectLock(bucketName, enabled, defaultRetentionSetting)
+	err := r.client.UpdateS3BucketObjectLock(bucketName, true, defaultRetentionSetting)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			fmt.Sprintf("Unable to Update S3 Bucket Object Lock Configuration for %s", bucketName),
@@ -326,10 +312,18 @@ func (r *S3BucketObjectLockConfigurationResource) ImportState(ctx context.Contex
 		return
 	}
 
+	// Validate that object lock is enabled on the bucket
+	if !objectLock.Enabled {
+		resp.Diagnostics.AddError(
+			"Object Lock Not Enabled on Bucket",
+			fmt.Sprintf("Cannot import object lock configuration for bucket %s because object lock is not enabled. This resource can only be used on buckets that have object lock enabled.", bucketName),
+		)
+		return
+	}
+
 	// Set the imported object lock configuration in state
 	state := S3BucketObjectLockConfigurationResourceModel{
 		BucketName: types.StringValue(bucketName),
-		Enabled:    types.BoolValue(objectLock.Enabled),
 		ID:         types.StringValue(bucketName),
 	}
 
