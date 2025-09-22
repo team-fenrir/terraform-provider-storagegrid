@@ -16,9 +16,10 @@ import (
 
 // Client holds the client configuration.
 type Client struct {
-	EndpointURL string
-	HTTPClient  *http.Client
-	Token       string
+	EndpointURL   string
+	S3EndpointURL string
+	HTTPClient    *http.Client
+	Token         string
 
 	// Cache for bucket list
 	// NOTE: Currently using simple caching without mutex for simplicity.
@@ -39,7 +40,7 @@ type Client struct {
 // s3AccessKey represents temporary access keys for S3 operations
 type s3AccessKey struct {
 	AccessKey string `json:"accessKey"`
-	SecretKey string `json:"secretAccessKey"`  // Fixed: API returns "secretAccessKey" not "secretKey"
+	SecretKey string `json:"secretAccessKey"` // Fixed: API returns "secretAccessKey" not "secretKey"
 	ID        string `json:"id"`
 }
 
@@ -62,14 +63,19 @@ type AuthResponse struct {
 }
 
 // NewClient creates and configures a new API client.
-func NewClient(endpoint, accountID, username, password *string) (*Client, error) {
+func NewClient(mgmtEndpoint, s3Endpoint *string, accountID, username, password *string) (*Client, error) {
 	c := Client{
-		EndpointURL: *endpoint,
+		EndpointURL: *mgmtEndpoint,
 		HTTPClient:  &http.Client{Timeout: 60 * time.Second}, // Increased timeout for bucket operations
 	}
 
-	// If endpoint is not provided, return the client without authenticating.
-	if username == nil || password == nil || accountID == nil || endpoint == nil {
+	// Set S3 endpoint if provided
+	if s3Endpoint != nil {
+		c.S3EndpointURL = *s3Endpoint
+	}
+
+	// If required parameters are not provided, return the client without authenticating.
+	if username == nil || password == nil || accountID == nil || mgmtEndpoint == nil {
 		return &c, nil
 	}
 

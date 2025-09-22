@@ -580,13 +580,15 @@ type S3AccessKeyResponse struct {
 	Data         s3AccessKey `json:"data"`
 }
 
-// GetS3EndpointURL converts the management endpoint to S3 endpoint (port 10443)
-func (c *Client) GetS3EndpointURL() string {
-	// TODO: Make this configurable later - hardcoded for testing
-	// Replace port and remove /api/v4 path for S3 endpoint
-	s3URL := strings.Replace(c.EndpointURL, ":9443", ":10443", 1)
-	s3URL = strings.Replace(s3URL, "/api/v4", "", 1)
-	return s3URL
+// GetS3EndpointURL returns the S3 endpoint URL, either from configuration or derived from management endpoint
+func (c *Client) GetS3EndpointURL() (string, error) {
+	// Use configured S3 endpoint if available
+	if c.S3EndpointURL != "" {
+		return c.S3EndpointURL, nil
+	}
+
+	// Return error if no S3 endpoint configured - S3 operations require explicit S3 endpoint
+	return "", fmt.Errorf("S3 endpoint not configured - S3 operations require an S3 endpoint to be specified in the provider configuration using endpoints.s3 or STORAGEGRID_S3_ENDPOINT environment variable")
 }
 
 // createTemporaryAccessKey creates a temporary access key for S3 operations
@@ -656,7 +658,11 @@ func (c *Client) GetS3Client() (*minio.Client, error) {
 	}
 
 	// Parse S3 endpoint
-	s3EndpointURL := c.GetS3EndpointURL()
+	s3EndpointURL, err := c.GetS3EndpointURL()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get S3 endpoint URL: %w", err)
+	}
+
 	parsedURL, err := url.Parse(s3EndpointURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse S3 endpoint URL: %w", err)
