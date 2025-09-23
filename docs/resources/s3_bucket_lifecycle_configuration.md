@@ -15,7 +15,7 @@ Manages lifecycle configuration for a StorageGrid S3 bucket.
 ```terraform
 # Configure lifecycle rules for the foo bucket
 resource "storagegrid_s3_bucket_lifecycle_configuration" "foo" {
-  bucket_name = storagegrid_s3_bucket.foo.name
+  bucket_name = storagegrid_s3_bucket.foo.bucket_name
 
   rule {
     id     = "foo-logs-expiration"
@@ -50,7 +50,7 @@ resource "storagegrid_s3_bucket_lifecycle_configuration" "foo" {
 
 # Configure lifecycle rules for the bar bucket with date-based expiration
 resource "storagegrid_s3_bucket_lifecycle_configuration" "bar" {
-  bucket_name = storagegrid_s3_bucket.bar.name
+  bucket_name = storagegrid_s3_bucket.bar.bucket_name
 
   rule {
     id     = "bar-archive-cleanup"
@@ -68,7 +68,7 @@ resource "storagegrid_s3_bucket_lifecycle_configuration" "bar" {
 
 # Simple lifecycle configuration for baz bucket (all objects)
 resource "storagegrid_s3_bucket_lifecycle_configuration" "baz" {
-  bucket_name = storagegrid_s3_bucket.baz.name
+  bucket_name = storagegrid_s3_bucket.baz.bucket_name
 
   rule {
     id     = "baz-global-expiration"
@@ -84,18 +84,18 @@ resource "storagegrid_s3_bucket_lifecycle_configuration" "baz" {
 
 # Reference the buckets created in the bucket example
 resource "storagegrid_s3_bucket" "foo" {
-  name   = "foo-bucket"
-  region = "us-east-1"
+  bucket_name = "foo-bucket"
+  region      = "us-east-1"
 }
 
 resource "storagegrid_s3_bucket" "bar" {
-  name   = "bar-bucket"
-  region = "us-east-1"
+  bucket_name = "bar-bucket"
+  region      = "us-east-1"
 }
 
 resource "storagegrid_s3_bucket" "baz" {
-  name   = "baz-bucket"
-  region = "us-east-1"
+  bucket_name = "baz-bucket"
+  region      = "us-east-1"
 }
 ```
 

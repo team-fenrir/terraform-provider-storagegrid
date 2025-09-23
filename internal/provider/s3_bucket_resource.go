@@ -37,7 +37,7 @@ type S3BucketResource struct {
 
 // S3BucketResourceModel describes the resource data model.
 type S3BucketResourceModel struct {
-	Name              types.String `tfsdk:"name"`
+	BucketName        types.String `tfsdk:"bucket_name"`
 	Region            types.String `tfsdk:"region"`
 	ObjectLockEnabled types.Bool   `tfsdk:"object_lock_enabled"`
 	ID                types.String `tfsdk:"id"`
@@ -51,7 +51,7 @@ func (r *S3BucketResource) Schema(ctx context.Context, req resource.SchemaReques
 	resp.Schema = schema.Schema{
 		Description: "Manages a StorageGrid S3 bucket.",
 		Attributes: map[string]schema.Attribute{
-			"name": schema.StringAttribute{
+			"bucket_name": schema.StringAttribute{
 				Description: "The name of the S3 bucket.",
 				Required:    true,
 				PlanModifiers: []planmodifier.String{
@@ -113,7 +113,7 @@ func (r *S3BucketResource) Create(ctx context.Context, req resource.CreateReques
 	}
 
 	// Create the bucket
-	bucketName := plan.Name.ValueString()
+	bucketName := plan.BucketName.ValueString()
 	region := plan.Region.ValueString()
 	objectLockEnabled := plan.ObjectLockEnabled.ValueBool()
 
@@ -141,7 +141,7 @@ func (r *S3BucketResource) Read(ctx context.Context, req resource.ReadRequest, r
 		return
 	}
 
-	bucketName := state.Name.ValueString()
+	bucketName := state.BucketName.ValueString()
 	bucket, err := r.client.GetS3Bucket(bucketName)
 	if err != nil {
 		// If bucket is not found, remove from state
@@ -154,7 +154,7 @@ func (r *S3BucketResource) Read(ctx context.Context, req resource.ReadRequest, r
 	}
 
 	// Update state with current values
-	state.Name = types.StringValue(bucket.Name)
+	state.BucketName = types.StringValue(bucket.Name)
 	state.ID = types.StringValue(bucket.Name)
 
 	if bucket.Region != "" {
@@ -195,7 +195,7 @@ func (r *S3BucketResource) Delete(ctx context.Context, req resource.DeleteReques
 		return
 	}
 
-	bucketName := state.Name.ValueString()
+	bucketName := state.BucketName.ValueString()
 
 	err := r.client.DeleteS3Bucket(bucketName)
 	if err != nil {
@@ -225,8 +225,8 @@ func (r *S3BucketResource) ImportState(ctx context.Context, req resource.ImportS
 
 	// Set the imported bucket data in state
 	state := S3BucketResourceModel{
-		Name: types.StringValue(bucket.Name),
-		ID:   types.StringValue(bucket.Name),
+		BucketName: types.StringValue(bucket.Name),
+		ID:         types.StringValue(bucket.Name),
 	}
 
 	// Set region with fallback to default
@@ -249,5 +249,5 @@ func (r *S3BucketResource) ImportState(ctx context.Context, req resource.ImportS
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 
 	// Set the ID attribute explicitly for import
-	resource.ImportStatePassthroughID(ctx, path.Root("name"), req, resp)
+	resource.ImportStatePassthroughID(ctx, path.Root("bucket_name"), req, resp)
 }

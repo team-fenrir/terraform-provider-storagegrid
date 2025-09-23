@@ -15,17 +15,17 @@ Fetches information about a StorageGrid S3 bucket.
 ```terraform
 # Look up an existing S3 bucket by name
 data "storagegrid_s3_bucket" "foo" {
-  name = "foo-bucket"
+  bucket_name = "foo-bucket"
 }
 
 # Look up an S3 bucket and use its configuration
 data "storagegrid_s3_bucket" "bar" {
-  name = "bar-bucket"
+  bucket_name = "bar-bucket"
 }
 
 # Use bucket data to configure lifecycle rules
 resource "storagegrid_s3_bucket_lifecycle_configuration" "foo" {
-  bucket_name = data.storagegrid_s3_bucket.foo.name
+  bucket_name = data.storagegrid_s3_bucket.foo.bucket_name
 
   rule {
     id     = "foo-cleanup"
@@ -40,7 +40,7 @@ resource "storagegrid_s3_bucket_lifecycle_configuration" "foo" {
 # Conditionally create object lock configuration if bucket has object lock enabled
 resource "storagegrid_s3_bucket_object_lock_configuration" "bar" {
   count       = data.storagegrid_s3_bucket.bar.object_lock_enabled ? 1 : 0
-  bucket_name = data.storagegrid_s3_bucket.bar.name
+  bucket_name = data.storagegrid_s3_bucket.bar.bucket_name
 
   default_retention_setting {
     mode = "compliance"
@@ -71,7 +71,6 @@ output "bar_bucket_object_lock_enabled" {
 
 ### Optional
 
-- `compliance` (Attributes) Compliance settings for the bucket. (see [below for nested schema](#nestedatt--compliance))
 - `delete_status` (Attributes) Delete object status for the bucket. (see [below for nested schema](#nestedatt--delete_status))
 - `region` (String) The region where the bucket is located.
 - `s3_object_lock` (Attributes) S3 object lock configuration for the bucket. (see [below for nested schema](#nestedatt--s3_object_lock))
@@ -79,17 +78,6 @@ output "bar_bucket_object_lock_enabled" {
 ### Read-Only
 
 - `creation_time` (String) The time when the bucket was created.
-- `name` (String) The name of the bucket.
-
-<a id="nestedatt--compliance"></a>
-### Nested Schema for `compliance`
-
-Read-Only:
-
-- `auto_delete` (Boolean) Indicates if auto-delete is enabled.
-- `legal_hold` (Boolean) Indicates if legal hold is enabled.
-- `retention_period_minutes` (Number) Retention period in minutes.
-
 
 <a id="nestedatt--delete_status"></a>
 ### Nested Schema for `delete_status`

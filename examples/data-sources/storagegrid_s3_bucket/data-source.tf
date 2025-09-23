@@ -1,16 +1,16 @@
 # Look up an existing S3 bucket by name
 data "storagegrid_s3_bucket" "foo" {
-  name = "foo-bucket"
+  bucket_name = "foo-bucket"
 }
 
 # Look up an S3 bucket and use its configuration
 data "storagegrid_s3_bucket" "bar" {
-  name = "bar-bucket"
+  bucket_name = "bar-bucket"
 }
 
 # Use bucket data to configure lifecycle rules
 resource "storagegrid_s3_bucket_lifecycle_configuration" "foo" {
-  bucket_name = data.storagegrid_s3_bucket.foo.name
+  bucket_name = data.storagegrid_s3_bucket.foo.bucket_name
 
   rule {
     id     = "foo-cleanup"
@@ -25,7 +25,7 @@ resource "storagegrid_s3_bucket_lifecycle_configuration" "foo" {
 # Conditionally create object lock configuration if bucket has object lock enabled
 resource "storagegrid_s3_bucket_object_lock_configuration" "bar" {
   count       = data.storagegrid_s3_bucket.bar.object_lock_enabled ? 1 : 0
-  bucket_name = data.storagegrid_s3_bucket.bar.name
+  bucket_name = data.storagegrid_s3_bucket.bar.bucket_name
 
   default_retention_setting {
     mode = "compliance"

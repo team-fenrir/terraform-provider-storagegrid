@@ -30,19 +30,10 @@ type S3BucketDataSource struct {
 
 type S3BucketDataSourceModel struct {
 	BucketName   types.String       `tfsdk:"bucket_name"`
-	Name         types.String       `tfsdk:"name"`
 	CreationTime types.String       `tfsdk:"creation_time"`
 	Region       types.String       `tfsdk:"region"`
-	Compliance   *ComplianceModel   `tfsdk:"compliance"`
 	S3ObjectLock *S3ObjectLockModel `tfsdk:"s3_object_lock"`
 	DeleteStatus *DeleteStatusModel `tfsdk:"delete_status"`
-}
-
-// ComplianceModel maps compliance configuration from the API response.
-type ComplianceModel struct {
-	AutoDelete             types.Bool  `tfsdk:"auto_delete"`
-	LegalHold              types.Bool  `tfsdk:"legal_hold"`
-	RetentionPeriodMinutes types.Int64 `tfsdk:"retention_period_minutes"`
 }
 
 // S3ObjectLockModel maps S3 object lock configuration from the API response.
@@ -77,10 +68,6 @@ func (d *S3BucketDataSource) Schema(_ context.Context, _ datasource.SchemaReques
 				Description: "The name of the S3 bucket to fetch.",
 				Required:    true,
 			},
-			"name": schema.StringAttribute{
-				Description: "The name of the bucket.",
-				Computed:    true,
-			},
 			"creation_time": schema.StringAttribute{
 				Description: "The time when the bucket was created.",
 				Computed:    true,
@@ -89,25 +76,6 @@ func (d *S3BucketDataSource) Schema(_ context.Context, _ datasource.SchemaReques
 				Description: "The region where the bucket is located.",
 				Computed:    true,
 				Optional:    true,
-			},
-			"compliance": schema.SingleNestedAttribute{
-				Description: "Compliance settings for the bucket.",
-				Computed:    true,
-				Optional:    true,
-				Attributes: map[string]schema.Attribute{
-					"auto_delete": schema.BoolAttribute{
-						Description: "Indicates if auto-delete is enabled.",
-						Computed:    true,
-					},
-					"legal_hold": schema.BoolAttribute{
-						Description: "Indicates if legal hold is enabled.",
-						Computed:    true,
-					},
-					"retention_period_minutes": schema.Int64Attribute{
-						Description: "Retention period in minutes.",
-						Computed:    true,
-					},
-				},
 			},
 			"s3_object_lock": schema.SingleNestedAttribute{
 				Description: "S3 object lock configuration for the bucket.",
@@ -198,7 +166,6 @@ func (d *S3BucketDataSource) Read(ctx context.Context, req datasource.ReadReques
 	}
 
 	// Map API response data to the Terraform state model
-	state.Name = types.StringValue(bucket.Name)
 	state.CreationTime = types.StringValue(bucket.CreationTime)
 
 	// Handle optional region field with default
@@ -206,15 +173,6 @@ func (d *S3BucketDataSource) Read(ctx context.Context, req datasource.ReadReques
 		state.Region = types.StringValue(bucket.Region)
 	} else {
 		state.Region = types.StringValue("us-east-1")
-	}
-
-	// Handle optional compliance configuration
-	if bucket.Compliance != nil {
-		state.Compliance = &ComplianceModel{
-			AutoDelete:             types.BoolValue(bucket.Compliance.AutoDelete),
-			LegalHold:              types.BoolValue(bucket.Compliance.LegalHold),
-			RetentionPeriodMinutes: types.Int64Value(bucket.Compliance.RetentionPeriodMinutes),
-		}
 	}
 
 	// Handle optional S3 object lock configuration
