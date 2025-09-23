@@ -777,13 +777,13 @@ func (c *Client) GetS3BucketLifecycleConfiguration(bucketName string) (*Lifecycl
 			}
 
 			// Handle expiration
-			if rule.Expiration.Days > 0 || !rule.Expiration.Date.Time.IsZero() {
+			if rule.Expiration.Days > 0 || !rule.Expiration.Date.IsZero() {
 				lifecycleRule.Expiration = &Expiration{}
 				if rule.Expiration.Days > 0 {
 					lifecycleRule.Expiration.Days = int(rule.Expiration.Days)
 				}
-				if !rule.Expiration.Date.Time.IsZero() {
-					lifecycleRule.Expiration.Date = rule.Expiration.Date.Time.Format("2006-01-02T15:04:05.000Z")
+				if !rule.Expiration.Date.IsZero() {
+					lifecycleRule.Expiration.Date = rule.Expiration.Date.Format("2006-01-02T15:04:05.000Z")
 				}
 			}
 
