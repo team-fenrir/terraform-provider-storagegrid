@@ -35,7 +35,7 @@ type S3BucketObjectLockConfigurationDataSourceModel struct {
 	DefaultRetentionSetting *DefaultRetentionSettingDataSourceModel `tfsdk:"default_retention_setting"`
 }
 
-// DefaultRetentionSettingDataSourceModel represents default retention settings
+// DefaultRetentionSettingDataSourceModel represents default retention settings.
 type DefaultRetentionSettingDataSourceModel struct {
 	Mode  types.String `tfsdk:"mode"`
 	Days  types.Int64  `tfsdk:"days"`

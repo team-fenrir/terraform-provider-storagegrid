@@ -38,27 +38,27 @@ type S3BucketDataSourceModel struct {
 	DeleteStatus *DeleteStatusModel `tfsdk:"delete_status"`
 }
 
-// ComplianceModel maps compliance configuration from the API response
+// ComplianceModel maps compliance configuration from the API response.
 type ComplianceModel struct {
 	AutoDelete             types.Bool  `tfsdk:"auto_delete"`
 	LegalHold              types.Bool  `tfsdk:"legal_hold"`
 	RetentionPeriodMinutes types.Int64 `tfsdk:"retention_period_minutes"`
 }
 
-// S3ObjectLockModel maps S3 object lock configuration from the API response
+// S3ObjectLockModel maps S3 object lock configuration from the API response.
 type S3ObjectLockModel struct {
 	Enabled                 types.Bool                    `tfsdk:"enabled"`
 	DefaultRetentionSetting *DefaultRetentionSettingModel `tfsdk:"default_retention_setting"`
 }
 
-// DefaultRetentionSettingModel maps default retention settings
+// DefaultRetentionSettingModel maps default retention settings.
 type DefaultRetentionSettingModel struct {
 	Mode  types.String `tfsdk:"mode"`
 	Days  types.Int64  `tfsdk:"days"`
 	Years types.Int64  `tfsdk:"years"`
 }
 
-// DeleteStatusModel maps delete object status from the API response
+// DeleteStatusModel maps delete object status from the API response.
 type DeleteStatusModel struct {
 	IsDeletingObjects  types.Bool   `tfsdk:"is_deleting_objects"`
 	InitialObjectCount types.String `tfsdk:"initial_object_count"`

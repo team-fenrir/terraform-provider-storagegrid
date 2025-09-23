@@ -42,7 +42,7 @@ type S3BucketObjectLockConfigurationResourceModel struct {
 	ID                      types.String                          `tfsdk:"id"`
 }
 
-// DefaultRetentionSettingResourceModel represents default retention settings for the resource
+// DefaultRetentionSettingResourceModel represents default retention settings for the resource.
 type DefaultRetentionSettingResourceModel struct {
 	Mode  types.String `tfsdk:"mode"`
 	Days  types.Int64  `tfsdk:"days"`

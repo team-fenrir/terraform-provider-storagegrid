@@ -34,7 +34,7 @@ type S3BucketLifecycleConfigurationDataSourceModel struct {
 	Rules      []LifecycleRuleDataSourceModel `tfsdk:"rule"`
 }
 
-// LifecycleRuleDataSourceModel represents a lifecycle rule
+// LifecycleRuleDataSourceModel represents a lifecycle rule.
 type LifecycleRuleDataSourceModel struct {
 	ID                          types.String                               `tfsdk:"id"`
 	Status                      types.String                               `tfsdk:"status"`
@@ -43,18 +43,18 @@ type LifecycleRuleDataSourceModel struct {
 	NoncurrentVersionExpiration *LifecycleNoncurrentVersionDataSourceModel `tfsdk:"noncurrent_version_expiration"`
 }
 
-// LifecycleFilterDataSourceModel represents a lifecycle rule filter
+// LifecycleFilterDataSourceModel represents a lifecycle rule filter.
 type LifecycleFilterDataSourceModel struct {
 	Prefix types.String `tfsdk:"prefix"`
 }
 
-// LifecycleExpirationDataSourceModel represents expiration settings
+// LifecycleExpirationDataSourceModel represents expiration settings.
 type LifecycleExpirationDataSourceModel struct {
 	Days types.Int64  `tfsdk:"days"`
 	Date types.String `tfsdk:"date"`
 }
 
-// LifecycleNoncurrentVersionDataSourceModel represents noncurrent version expiration settings
+// LifecycleNoncurrentVersionDataSourceModel represents noncurrent version expiration settings.
 type LifecycleNoncurrentVersionDataSourceModel struct {
 	NoncurrentDays types.Int64 `tfsdk:"noncurrent_days"`
 }

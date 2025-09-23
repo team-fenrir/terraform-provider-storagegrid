@@ -42,27 +42,27 @@ type S3BucketData struct {
 	Replication  *CrossGridReplicationConfig `json:"crossGridReplication,omitempty"`
 }
 
-// ComplianceConfig represents compliance settings for the bucket
+// ComplianceConfig represents compliance settings for the bucket.
 type ComplianceConfig struct {
 	AutoDelete             bool  `json:"autoDelete"`
 	LegalHold              bool  `json:"legalHold"`
 	RetentionPeriodMinutes int64 `json:"retentionPeriodMinutes"`
 }
 
-// S3ObjectLockConfig represents S3 object lock settings
+// S3ObjectLockConfig represents S3 object lock settings.
 type S3ObjectLockConfig struct {
 	Enabled                 bool                     `json:"enabled"`
 	DefaultRetentionSetting *DefaultRetentionSetting `json:"defaultRetentionSetting,omitempty"`
 }
 
-// DefaultRetentionSetting represents default retention settings for object lock
+// DefaultRetentionSetting represents default retention settings for object lock.
 type DefaultRetentionSetting struct {
 	Mode  string `json:"-"`
 	Days  int    `json:"-"`
 	Years int    `json:"-"`
 }
 
-// UnmarshalJSON handles conversion of string or number days/years to integers
+// UnmarshalJSON handles conversion of string or number days/years to integers.
 func (d *DefaultRetentionSetting) UnmarshalJSON(data []byte) error {
 	// First try to unmarshal into a flexible structure that can handle both strings and numbers
 	aux := &struct {
@@ -113,7 +113,7 @@ func (d *DefaultRetentionSetting) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// MarshalJSON handles conversion of integer days/years for API requests
+// MarshalJSON handles conversion of integer days/years for API requests.
 func (d *DefaultRetentionSetting) MarshalJSON() ([]byte, error) {
 	// Create a struct that includes the fields we want to marshal
 	aux := &struct {
@@ -135,14 +135,14 @@ func (d *DefaultRetentionSetting) MarshalJSON() ([]byte, error) {
 	return json.Marshal(aux)
 }
 
-// DeleteObjectStatusConfig represents delete status for the bucket
+// DeleteObjectStatusConfig represents delete status for the bucket.
 type DeleteObjectStatusConfig struct {
 	IsDeletingObjects  bool   `json:"isDeletingObjects"`
 	InitialObjectCount string `json:"initialObjectCount"`
 	InitialObjectBytes string `json:"initialObjectBytes"`
 }
 
-// CrossGridReplicationConfig represents cross-grid replication settings
+// CrossGridReplicationConfig represents cross-grid replication settings.
 type CrossGridReplicationConfig struct {
 	Rules []interface{} `json:"rules"`
 }
@@ -186,26 +186,26 @@ func (c *Client) getCachedBucketList() ([]S3BucketData, error) {
 	return c.bucketCache, nil
 }
 
-// S3BucketCreateRequest represents the request body for creating an S3 bucket
+// S3BucketCreateRequest represents the request body for creating an S3 bucket.
 type S3BucketCreateRequest struct {
 	Name         string                    `json:"name"`
 	Region       string                    `json:"region"`
 	S3ObjectLock *S3BucketCreateObjectLock `json:"s3ObjectLock,omitempty"`
 }
 
-// S3BucketCreateObjectLock represents object lock settings for bucket creation
+// S3BucketCreateObjectLock represents object lock settings for bucket creation.
 type S3BucketCreateObjectLock struct {
 	Enabled                 bool                            `json:"enabled"`
 	DefaultRetentionSetting *S3BucketCreateRetentionSetting `json:"defaultRetentionSetting,omitempty"`
 }
 
-// S3BucketCreateRetentionSetting represents default retention settings for bucket creation
+// S3BucketCreateRetentionSetting represents default retention settings for bucket creation.
 type S3BucketCreateRetentionSetting struct {
 	Mode string `json:"mode"`
 	Days int    `json:"days"`
 }
 
-// S3BucketCreateResponse represents the API response structure for bucket creation
+// S3BucketCreateResponse represents the API response structure for bucket creation.
 type S3BucketCreateResponse struct {
 	ResponseTime string                  `json:"responseTime"`
 	Status       string                  `json:"status"`
@@ -215,18 +215,18 @@ type S3BucketCreateResponse struct {
 	Metadata     *S3BucketCreateMetadata `json:"metadata,omitempty"`
 }
 
-// S3BucketCreateData represents the data returned after bucket creation
+// S3BucketCreateData represents the data returned after bucket creation.
 type S3BucketCreateData struct {
 	Name   string `json:"name"`
 	Region string `json:"region"`
 }
 
-// S3BucketCreateMetadata represents metadata including alerts
+// S3BucketCreateMetadata represents metadata including alerts.
 type S3BucketCreateMetadata struct {
 	Alerts []S3BucketAlert `json:"alerts,omitempty"`
 }
 
-// S3BucketAlert represents alert information
+// S3BucketAlert represents alert information.
 type S3BucketAlert struct {
 	Deprecated bool   `json:"deprecated"`
 	Severity   string `json:"severity"`
@@ -234,7 +234,7 @@ type S3BucketAlert struct {
 	Key        string `json:"key"`
 }
 
-// CreateS3Bucket creates a new S3 bucket with the specified name, region, and object lock settings
+// CreateS3Bucket creates a new S3 bucket with the specified name, region, and object lock settings.
 func (c *Client) CreateS3Bucket(bucketName, region string, objectLockEnabled bool) error {
 	url := fmt.Sprintf("%s/api/v4/org/containers", c.EndpointURL)
 	log.Printf("Executing POST request to URL: %s", url)
@@ -292,7 +292,7 @@ func (c *Client) CreateS3Bucket(bucketName, region string, objectLockEnabled boo
 	return nil
 }
 
-// DeleteS3Bucket deletes an S3 bucket by name
+// DeleteS3Bucket deletes an S3 bucket by name.
 func (c *Client) DeleteS3Bucket(bucketName string) error {
 	url := fmt.Sprintf("%s/api/v4/org/containers/%s", c.EndpointURL, bucketName)
 	log.Printf("Executing DELETE request to URL: %s", url)
@@ -331,7 +331,7 @@ func (c *Client) DeleteS3Bucket(bucketName string) error {
 	return nil
 }
 
-// isTimeoutError checks if an error is a timeout error
+// isTimeoutError checks if an error is a timeout error.
 func isTimeoutError(err error) bool {
 	if err == nil {
 		return false
@@ -371,7 +371,7 @@ func (c *Client) GetS3Bucket(bucketName string) (*S3BucketData, error) {
 	return nil, fmt.Errorf("bucket %s not found", bucketName)
 }
 
-// S3BucketVersioningAPIResponse represents the API response structure for bucket versioning
+// S3BucketVersioningAPIResponse represents the API response structure for bucket versioning.
 type S3BucketVersioningAPIResponse struct {
 	ResponseTime string                 `json:"responseTime"`
 	Status       string                 `json:"status"`
@@ -380,13 +380,13 @@ type S3BucketVersioningAPIResponse struct {
 	Data         S3BucketVersioningData `json:"data"`
 }
 
-// S3BucketVersioningData represents the versioning configuration for an S3 bucket
+// S3BucketVersioningData represents the versioning configuration for an S3 bucket.
 type S3BucketVersioningData struct {
 	VersioningEnabled   bool `json:"versioningEnabled"`
 	VersioningSuspended bool `json:"versioningSuspended"`
 }
 
-// GetS3BucketVersioning retrieves versioning configuration for a specific S3 bucket
+// GetS3BucketVersioning retrieves versioning configuration for a specific S3 bucket.
 func (c *Client) GetS3BucketVersioning(bucketName string) (*S3BucketVersioningData, error) {
 	url := fmt.Sprintf("%s/api/v4/org/containers/%s/versioning", c.EndpointURL, bucketName)
 	log.Printf("Executing GET request to URL: %s", url)
@@ -409,13 +409,13 @@ func (c *Client) GetS3BucketVersioning(bucketName string) (*S3BucketVersioningDa
 	return &apiResponse.Data, nil
 }
 
-// S3BucketVersioningUpdateRequest represents the request body for updating bucket versioning
+// S3BucketVersioningUpdateRequest represents the request body for updating bucket versioning.
 type S3BucketVersioningUpdateRequest struct {
 	VersioningEnabled   bool `json:"versioningEnabled"`
 	VersioningSuspended bool `json:"versioningSuspended"`
 }
 
-// UpdateS3BucketVersioning updates versioning configuration for a specific S3 bucket
+// UpdateS3BucketVersioning updates versioning configuration for a specific S3 bucket.
 func (c *Client) UpdateS3BucketVersioning(bucketName string, versioningEnabled, versioningSuspended bool) error {
 	url := fmt.Sprintf("%s/api/v4/org/containers/%s/versioning", c.EndpointURL, bucketName)
 	log.Printf("Executing PUT request to URL: %s", url)
@@ -454,7 +454,7 @@ func (c *Client) UpdateS3BucketVersioning(bucketName string, versioningEnabled, 
 	return nil
 }
 
-// S3BucketObjectLockAPIResponse represents the API response structure for bucket object lock
+// S3BucketObjectLockAPIResponse represents the API response structure for bucket object lock.
 type S3BucketObjectLockAPIResponse struct {
 	ResponseTime string                 `json:"responseTime"`
 	Status       string                 `json:"status"`
@@ -463,13 +463,13 @@ type S3BucketObjectLockAPIResponse struct {
 	Data         S3BucketObjectLockData `json:"data"`
 }
 
-// S3BucketObjectLockData represents the object lock configuration for an S3 bucket
+// S3BucketObjectLockData represents the object lock configuration for an S3 bucket.
 type S3BucketObjectLockData struct {
 	Enabled                 bool                     `json:"enabled"`
 	DefaultRetentionSetting *DefaultRetentionSetting `json:"defaultRetentionSetting,omitempty"`
 }
 
-// GetS3BucketObjectLock retrieves object lock configuration for a specific S3 bucket
+// GetS3BucketObjectLock retrieves object lock configuration for a specific S3 bucket.
 func (c *Client) GetS3BucketObjectLock(bucketName string) (*S3BucketObjectLockData, error) {
 	url := fmt.Sprintf("%s/api/v4/org/containers/%s/object-lock", c.EndpointURL, bucketName)
 	log.Printf("Executing GET request to URL: %s", url)
@@ -492,13 +492,13 @@ func (c *Client) GetS3BucketObjectLock(bucketName string) (*S3BucketObjectLockDa
 	return &apiResponse.Data, nil
 }
 
-// S3BucketObjectLockUpdateRequest represents the request body for updating bucket object lock
+// S3BucketObjectLockUpdateRequest represents the request body for updating bucket object lock.
 type S3BucketObjectLockUpdateRequest struct {
 	Enabled                 bool                     `json:"enabled"`
 	DefaultRetentionSetting *DefaultRetentionSetting `json:"defaultRetentionSetting,omitempty"`
 }
 
-// UpdateS3BucketObjectLock updates object lock configuration for a specific S3 bucket
+// UpdateS3BucketObjectLock updates object lock configuration for a specific S3 bucket.
 func (c *Client) UpdateS3BucketObjectLock(bucketName string, enabled bool, defaultRetentionSetting *DefaultRetentionSetting) error {
 	url := fmt.Sprintf("%s/api/v4/org/containers/%s/object-lock", c.EndpointURL, bucketName)
 	log.Printf("Executing PUT request to URL: %s", url)
@@ -541,13 +541,13 @@ func (c *Client) UpdateS3BucketObjectLock(bucketName string, enabled bool, defau
 
 // S3 Lifecycle Configuration structures for XML marshalling/unmarshalling
 
-// LifecycleConfiguration represents the root lifecycle configuration
+// LifecycleConfiguration represents the root lifecycle configuration.
 type LifecycleConfiguration struct {
 	XMLName xml.Name `xml:"LifecycleConfiguration"`
 	Rules   []Rule   `xml:"Rule"`
 }
 
-// Rule represents a lifecycle rule
+// Rule represents a lifecycle rule.
 type Rule struct {
 	ID                          string                       `xml:"ID,omitempty"`
 	Status                      string                       `xml:"Status"`
@@ -556,23 +556,23 @@ type Rule struct {
 	NoncurrentVersionExpiration *NoncurrentVersionExpiration `xml:"NoncurrentVersionExpiration,omitempty"`
 }
 
-// Filter represents the filter for a lifecycle rule
+// Filter represents the filter for a lifecycle rule.
 type Filter struct {
 	Prefix string `xml:"Prefix,omitempty"`
 }
 
-// Expiration represents expiration settings for current versions
+// Expiration represents expiration settings for current versions.
 type Expiration struct {
 	Days int    `xml:"Days,omitempty"`
 	Date string `xml:"Date,omitempty"`
 }
 
-// NoncurrentVersionExpiration represents expiration settings for noncurrent versions
+// NoncurrentVersionExpiration represents expiration settings for noncurrent versions.
 type NoncurrentVersionExpiration struct {
 	NoncurrentDays int `xml:"NoncurrentDays,omitempty"`
 }
 
-// S3AccessKeyResponse represents the API response for access key creation
+// S3AccessKeyResponse represents the API response for access key creation.
 type S3AccessKeyResponse struct {
 	ResponseTime string      `json:"responseTime"`
 	Status       string      `json:"status"`
@@ -580,7 +580,7 @@ type S3AccessKeyResponse struct {
 	Data         s3AccessKey `json:"data"`
 }
 
-// GetS3EndpointURL returns the S3 endpoint URL, either from configuration or derived from management endpoint
+// GetS3EndpointURL returns the S3 endpoint URL, either from configuration or derived from management endpoint.
 func (c *Client) GetS3EndpointURL() (string, error) {
 	// Use configured S3 endpoint if available
 	if c.S3EndpointURL != "" {
@@ -591,7 +591,7 @@ func (c *Client) GetS3EndpointURL() (string, error) {
 	return "", fmt.Errorf("S3 endpoint not configured - S3 operations require an S3 endpoint to be specified in the provider configuration using endpoints.s3 or STORAGEGRID_S3_ENDPOINT environment variable")
 }
 
-// createTemporaryAccessKey creates a temporary access key for S3 operations
+// createTemporaryAccessKey creates a temporary access key for S3 operations.
 func (c *Client) createTemporaryAccessKey() (*s3AccessKey, error) {
 	url := fmt.Sprintf("%s/api/v4/org/users/current-user/s3-access-keys", c.EndpointURL)
 	log.Printf("Creating temporary access key via URL: %s", url)
@@ -626,7 +626,7 @@ func (c *Client) createTemporaryAccessKey() (*s3AccessKey, error) {
 	return &response.Data, nil
 }
 
-// deleteAccessKey deletes a temporary access key
+// deleteAccessKey deletes a temporary access key.
 func (c *Client) deleteAccessKey(accessKeyID string) error {
 	url := fmt.Sprintf("%s/api/v4/org/users/current-user/s3-access-keys/%s", c.EndpointURL, accessKeyID)
 	log.Printf("Deleting access key via URL: %s", url)
@@ -644,7 +644,7 @@ func (c *Client) deleteAccessKey(accessKeyID string) error {
 	return nil
 }
 
-// GetS3Client returns a cached MinIO client, creating it if necessary
+// GetS3Client returns a cached MinIO client, creating it if necessary.
 func (c *Client) GetS3Client() (*minio.Client, error) {
 	// Return cached client if available
 	if c.s3Client != nil {
@@ -685,7 +685,7 @@ func (c *Client) GetS3Client() (*minio.Client, error) {
 	return c.s3Client, nil
 }
 
-// clearS3ClientCache clears the S3 client cache and deletes the access key
+// clearS3ClientCache clears the S3 client cache and deletes the access key.
 func (c *Client) clearS3ClientCache() {
 	if c.s3AccessKey != nil {
 		if err := c.deleteAccessKey(c.s3AccessKey.ID); err != nil {
@@ -696,7 +696,7 @@ func (c *Client) clearS3ClientCache() {
 	c.s3AccessKey = nil
 }
 
-// executeS3Operation executes an S3 operation with retry on authentication failure
+// executeS3Operation executes an S3 operation with retry on authentication failure.
 func (c *Client) executeS3Operation(operation func(*minio.Client) error) error {
 	client, err := c.GetS3Client()
 	if err != nil {
@@ -733,18 +733,18 @@ func (c *Client) executeS3Operation(operation func(*minio.Client) error) error {
 	return err
 }
 
-// CleanupS3Client cleans up the cached S3 client and deletes the temporary access key
+// CleanupS3Client cleans up the cached S3 client and deletes the temporary access key.
 func (c *Client) CleanupS3Client() {
 	c.clearS3ClientCache()
 	log.Printf("Cleaned up S3 client and deleted temporary access key")
 }
 
-// GetS3AccessKey returns the current S3 access key (for debugging)
+// GetS3AccessKey returns the current S3 access key (for debugging).
 func (c *Client) GetS3AccessKey() *s3AccessKey {
 	return c.s3AccessKey
 }
 
-// GetS3BucketLifecycleConfiguration retrieves lifecycle configuration for a specific S3 bucket
+// GetS3BucketLifecycleConfiguration retrieves lifecycle configuration for a specific S3 bucket.
 func (c *Client) GetS3BucketLifecycleConfiguration(bucketName string) (*LifecycleConfiguration, error) {
 	var result *LifecycleConfiguration
 	var operationErr error
@@ -811,7 +811,7 @@ func (c *Client) GetS3BucketLifecycleConfiguration(bucketName string) (*Lifecycl
 	return result, nil
 }
 
-// PutS3BucketLifecycleConfiguration sets lifecycle configuration for a specific S3 bucket
+// PutS3BucketLifecycleConfiguration sets lifecycle configuration for a specific S3 bucket.
 func (c *Client) PutS3BucketLifecycleConfiguration(bucketName string, lifecycleConfig *LifecycleConfiguration) error {
 	return c.executeS3Operation(func(client *minio.Client) error {
 		log.Printf("Setting lifecycle configuration for bucket: %s", bucketName)
@@ -863,7 +863,7 @@ func (c *Client) PutS3BucketLifecycleConfiguration(bucketName string, lifecycleC
 	})
 }
 
-// DeleteS3BucketLifecycleConfiguration deletes lifecycle configuration for a specific S3 bucket
+// DeleteS3BucketLifecycleConfiguration deletes lifecycle configuration for a specific S3 bucket.
 func (c *Client) DeleteS3BucketLifecycleConfiguration(bucketName string) error {
 	return c.executeS3Operation(func(client *minio.Client) error {
 		log.Printf("Deleting lifecycle configuration for bucket: %s", bucketName)
