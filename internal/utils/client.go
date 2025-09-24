@@ -10,13 +10,38 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/minio/minio-go/v7"
 )
 
 // Client holds the client configuration.
 type Client struct {
-	EndpointURL string
-	HTTPClient  *http.Client
-	Token       string
+	EndpointURL   string
+	S3EndpointURL string
+	HTTPClient    *http.Client
+	Token         string
+
+	// Cache for bucket list
+	// NOTE: Currently using simple caching without mutex for simplicity.
+	// If concurrent access issues arise (multiple goroutines corrupting cache or causing panics),
+	// add thread safety with sync.RWMutex:
+	//   bucketCacheMux  sync.RWMutex
+	// Then wrap cache reads with bucketCacheMux.RLock()/RUnlock() and
+	// cache writes with bucketCacheMux.Lock()/Unlock() using double-checked locking pattern
+	// to prevent race conditions where multiple goroutines fetch/update cache simultaneously.
+	bucketCache     []S3BucketData
+	bucketCacheTime time.Time
+
+	// S3 client cache for lifecycle operations
+	s3Client    *minio.Client
+	s3AccessKey *s3AccessKey
+}
+
+// s3AccessKey represents temporary access keys for S3 operations.
+type s3AccessKey struct {
+	AccessKey string `json:"accessKey"`
+	SecretKey string `json:"secretAccessKey"` // Fixed: API returns "secretAccessKey" not "secretKey"
+	ID        string `json:"id"`
 }
 
 // SignInBody represents the request body for the authentication request.
@@ -38,14 +63,19 @@ type AuthResponse struct {
 }
 
 // NewClient creates and configures a new API client.
-func NewClient(endpoint, accountID, username, password *string) (*Client, error) {
+func NewClient(mgmtEndpoint, s3Endpoint *string, accountID, username, password *string) (*Client, error) {
 	c := Client{
-		EndpointURL: *endpoint,
-		HTTPClient:  &http.Client{Timeout: 10 * time.Second},
+		EndpointURL: *mgmtEndpoint,
+		HTTPClient:  &http.Client{Timeout: 60 * time.Second}, // Increased timeout for bucket operations
 	}
 
-	// If endpoint is not provided, return the client without authenticating.
-	if username == nil || password == nil || accountID == nil || endpoint == nil {
+	// Set S3 endpoint if provided
+	if s3Endpoint != nil {
+		c.S3EndpointURL = *s3Endpoint
+	}
+
+	// If required parameters are not provided, return the client without authenticating.
+	if username == nil || password == nil || accountID == nil || mgmtEndpoint == nil {
 		return &c, nil
 	}
 

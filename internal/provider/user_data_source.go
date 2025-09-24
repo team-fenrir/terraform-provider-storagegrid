@@ -31,21 +31,9 @@ type UserDataSource struct {
 
 // UserDataSourceModel maps the user data to the Terraform schema.
 type UserDataSourceModel struct {
-	UserName   types.String   `tfsdk:"user_name"`
-	Status     types.String   `tfsdk:"status"`
-	APIVersion types.String   `tfsdk:"api_version"`
-	Data       *UserDataModel `tfsdk:"data"`
-}
-
-// UserDataModel maps the nested 'data' object for a user.
-// This struct is updated to reflect the new response body.
-type UserDataModel struct {
-	ID         types.String `tfsdk:"id"`
-	AccountID  types.String `tfsdk:"account_id"`
+	UserName   types.String `tfsdk:"user_name"`
 	FullName   types.String `tfsdk:"full_name"`
 	UniqueName types.String `tfsdk:"unique_name"`
-	UserURN    types.String `tfsdk:"user_urn"`
-	Federated  types.Bool   `tfsdk:"federated"`
 	MemberOf   types.List   `tfsdk:"member_of"`
 	Disable    types.Bool   `tfsdk:"disable"`
 }
@@ -65,52 +53,22 @@ func (d *UserDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, r
 				Description: "The unique name of the user to fetch (e.g., 'user/Test').",
 				Required:    true,
 			},
-			"status": schema.StringAttribute{
-				Description: "The status of the API response.",
+			"full_name": schema.StringAttribute{
+				Description: "The full name of the user.",
 				Computed:    true,
 			},
-			"api_version": schema.StringAttribute{
-				Description: "The version of the API.",
+			"unique_name": schema.StringAttribute{
+				Description: "The unique name of the user.",
 				Computed:    true,
 			},
-			"data": schema.SingleNestedAttribute{
-				Description: "The main data object for the StorageGrid User.",
+			"member_of": schema.ListAttribute{
+				Description: "List of group IDs the user is a member of.",
 				Computed:    true,
-				Attributes: map[string]schema.Attribute{
-					"id": schema.StringAttribute{
-						Description: "The unique identifier for the user.",
-						Computed:    true,
-					},
-					"account_id": schema.StringAttribute{
-						Description: "The account ID associated with the user.",
-						Computed:    true,
-					},
-					"full_name": schema.StringAttribute{
-						Description: "The full name of the user.",
-						Computed:    true,
-					},
-					"unique_name": schema.StringAttribute{
-						Description: "The unique name of the user.",
-						Computed:    true,
-					},
-					"user_urn": schema.StringAttribute{
-						Description: "The URN of the user.",
-						Computed:    true,
-					},
-					"federated": schema.BoolAttribute{
-						Description: "Indicates if the user is federated.",
-						Computed:    true,
-					},
-					"member_of": schema.ListAttribute{
-						Description: "A list of group IDs that the user is a member of.",
-						Computed:    true,
-						ElementType: types.StringType,
-					},
-					"disable": schema.BoolAttribute{
-						Description: "Indicates if the user account is disabled.",
-						Computed:    true,
-					},
-				},
+				ElementType: types.StringType,
+			},
+			"disable": schema.BoolAttribute{
+				Description: "Whether the user is disabled.",
+				Computed:    true,
 			},
 		},
 	}
@@ -153,10 +111,7 @@ func (d *UserDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 
 	user := apiResponse.Data
 
-	// Map the API response to the Terraform state model
-	state.Status = types.StringValue(apiResponse.Status)
-	state.APIVersion = types.StringValue(apiResponse.APIVersion)
-
+	// Map the API response to the flattened Terraform state model
 	// Convert the 'memberOf' string slice to a types.List
 	memberOfList, diags := types.ListValueFrom(ctx, types.StringType, user.MemberOf)
 	resp.Diagnostics.Append(diags...)
@@ -164,16 +119,10 @@ func (d *UserDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 		return
 	}
 
-	state.Data = &UserDataModel{
-		ID:         types.StringValue(user.ID),
-		AccountID:  types.StringValue(user.AccountID),
-		FullName:   types.StringValue(user.FullName),
-		UniqueName: types.StringValue(user.UniqueName),
-		UserURN:    types.StringValue(user.UserURN),
-		Federated:  types.BoolValue(user.Federated),
-		MemberOf:   memberOfList,
-		Disable:    types.BoolValue(user.Disable),
-	}
+	state.FullName = types.StringValue(user.FullName)
+	state.UniqueName = types.StringValue(user.UniqueName)
+	state.MemberOf = memberOfList
+	state.Disable = types.BoolValue(user.Disable)
 
 	// Save the final state
 	diags = resp.State.Set(ctx, &state)

@@ -29,22 +29,10 @@ type GroupDataSource struct {
 }
 
 type GroupDataSourceModel struct {
-	GroupName  types.String    `tfsdk:"group_name"`
-	Status     types.String    `tfsdk:"status"`
-	APIVersion types.String    `tfsdk:"api_version"`
-	Data       *GroupDataModel `tfsdk:"data"`
-}
-
-// GroupDataModel maps the nested 'data' object.
-type GroupDataModel struct {
-	ID                 types.String  `tfsdk:"id"`
-	AccountID          types.String  `tfsdk:"account_id"`
-	DisplayName        types.String  `tfsdk:"display_name"`
-	UniqueName         types.String  `tfsdk:"unique_name"`
-	GroupURN           types.String  `tfsdk:"group_urn"`
-	Federated          types.Bool    `tfsdk:"federated"`
-	ManagementReadOnly types.Bool    `tfsdk:"management_read_only"`
-	Policies           PoliciesModel `tfsdk:"policies"`
+	GroupName   types.String   `tfsdk:"group_name"`
+	DisplayName types.String   `tfsdk:"display_name"`
+	UniqueName  types.String   `tfsdk:"unique_name"`
+	Policies    *PoliciesModel `tfsdk:"policies"`
 }
 
 // PoliciesModel maps the nested 'policies' object.
@@ -87,111 +75,77 @@ func (d *GroupDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, 
 				Description: "The unique name of the group to fetch (e.g., 'group/example').",
 				Required:    true,
 			},
-			"status": schema.StringAttribute{
-				Description: "The status of the API response.",
+			"display_name": schema.StringAttribute{
+				Description: "The display name of the group.",
 				Computed:    true,
 			},
-			"api_version": schema.StringAttribute{
-				Description: "The version of the API.",
+			"unique_name": schema.StringAttribute{
+				Description: "The unique name of the group.",
 				Computed:    true,
 			},
-			"data": schema.SingleNestedAttribute{
-				Description: "The main data object for the StorageGrid Group.",
+			"policies": schema.SingleNestedAttribute{
+				Description: "Contains the policy definitions for the group.",
 				Computed:    true,
 				Attributes: map[string]schema.Attribute{
-					"id": schema.StringAttribute{
-						Description: "The unique identifier for the group.",
-						Computed:    true,
-					},
-					"account_id": schema.StringAttribute{
-						Description: "The account ID associated with the group.",
-						Computed:    true,
-					},
-					"display_name": schema.StringAttribute{
-						Description: "The display name of the group.",
-						Computed:    true,
-					},
-					"unique_name": schema.StringAttribute{
-						Description: "The unique name of the group.",
-						Computed:    true,
-					},
-					"group_urn": schema.StringAttribute{
-						Description: "The URN of the group.",
-						Computed:    true,
-					},
-					"federated": schema.BoolAttribute{
-						Description: "Indicates if the group is federated.",
-						Computed:    true,
-					},
-					"management_read_only": schema.BoolAttribute{
-						Description: "Indicates if the group has read-only management access.",
-						Computed:    true,
-					},
-					"policies": schema.SingleNestedAttribute{
-						Description: "Contains the policy definitions for the group.",
+					"s3": schema.SingleNestedAttribute{
+						Description: "S3 policy details.",
 						Computed:    true,
 						Attributes: map[string]schema.Attribute{
-							"s3": schema.SingleNestedAttribute{
-								Description: "S3 policy details.",
+							"version": schema.StringAttribute{
+								Description: "The version of the policy.",
 								Computed:    true,
-								Attributes: map[string]schema.Attribute{
-									"version": schema.StringAttribute{
-										Description: "The version of the policy.",
-										Computed:    true,
-									},
-									"statement": schema.ListNestedAttribute{
-										Description: "A list of policy statements.",
-										Computed:    true,
-										NestedObject: schema.NestedAttributeObject{
-											Attributes: map[string]schema.Attribute{
-												"effect": schema.StringAttribute{
-													Description: "The effect of the statement (e.g., 'Allow' or 'Deny').",
-													Computed:    true,
-												},
-												"action": schema.ListAttribute{
-													Description: "A list of actions allowed or denied by the statement.",
-													Computed:    true,
-													ElementType: types.StringType,
-												},
-												"resource": schema.ListAttribute{
-													Description: "A list of resources to which the statement applies.",
-													Computed:    true,
-													ElementType: types.StringType,
-												},
-											},
+							},
+							"statement": schema.ListNestedAttribute{
+								Description: "A list of policy statements.",
+								Computed:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"effect": schema.StringAttribute{
+											Description: "The effect of the statement (e.g., 'Allow' or 'Deny').",
+											Computed:    true,
+										},
+										"action": schema.ListAttribute{
+											Description: "A list of actions allowed or denied by the statement.",
+											Computed:    true,
+											ElementType: types.StringType,
+										},
+										"resource": schema.ListAttribute{
+											Description: "A list of resources to which the statement applies.",
+											Computed:    true,
+											ElementType: types.StringType,
 										},
 									},
 								},
 							},
-							"management": schema.SingleNestedAttribute{
-								Description: "Management policy details.",
+						},
+					},
+					"management": schema.SingleNestedAttribute{
+						Description: "Management policy details.",
+						Computed:    true,
+						Attributes: map[string]schema.Attribute{
+							"manage_all_containers": schema.BoolAttribute{
+								Description: "Permission to manage all containers.",
 								Computed:    true,
-								Attributes: map[string]schema.Attribute{
-									"manage_all_containers": schema.BoolAttribute{
-										Description: "Permission to manage all containers.",
-										Computed:    true,
-									},
-									"manage_endpoints": schema.BoolAttribute{
-										Description: "Permission to manage endpoints.",
-										Computed:    true,
-									},
-									"manage_own_container_objects": schema.BoolAttribute{
-										Description: "Permission to manage objects in own containers.",
-										Computed:    true,
-									},
-									"manage_own_s3_credentials": schema.BoolAttribute{
-										Description: "Permission to manage own S3 credentials.",
-										Computed:    true,
-									},
-									"root_access": schema.BoolAttribute{
-										Description: "Root access permissions.",
-										Computed:    true,
-									},
-									"view_all_containers": schema.BoolAttribute{
-										Description: "Permission to view all containers.",
-										Computed:    true,
-									},
-								},
+							},
+							"manage_endpoints": schema.BoolAttribute{
+								Description: "Permission to manage endpoints.",
+								Computed:    true,
+							},
+							"manage_own_container_objects": schema.BoolAttribute{
+								Description: "Permission to manage objects in own containers.",
+								Computed:    true,
+							},
+							"manage_own_s3_credentials": schema.BoolAttribute{
+								Description: "Permission to manage own S3 credentials.",
+								Computed:    true,
+							},
+							"root_access": schema.BoolAttribute{
+								Description: "Root access permissions.",
+								Computed:    true,
+							},
+							"view_all_containers": schema.BoolAttribute{
+								Description: "Permission to view all containers.",
+								Computed:    true,
 							},
 						},
 					},
@@ -236,30 +190,20 @@ func (d *GroupDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 
 	group := apiResponse.Data
 
-	// Map API response data to the Terraform state model
-	state.Status = types.StringValue(apiResponse.Status)
-	state.APIVersion = types.StringValue(apiResponse.APIVersion)
-
-	state.Data = &GroupDataModel{
-		ID:                 types.StringValue(group.ID),
-		AccountID:          types.StringValue(group.AccountID),
-		DisplayName:        types.StringValue(group.DisplayName),
-		UniqueName:         types.StringValue(group.UniqueName),
-		GroupURN:           types.StringValue(group.GroupURN),
-		Federated:          types.BoolValue(group.Federated),
-		ManagementReadOnly: types.BoolValue(group.ManagementReadOnly),
-		Policies: PoliciesModel{
-			S3: S3PolicyModel{
-				Version: types.StringValue(group.Policies.S3.Version),
-			},
-			Management: ManagementPolicyModel{
-				ManageAllContainers:       types.BoolValue(group.Policies.Management.ManageAllContainers),
-				ManageEndpoints:           types.BoolValue(group.Policies.Management.ManageEndpoints),
-				ManageOwnContainerObjects: types.BoolValue(group.Policies.Management.ManageOwnContainerObjects),
-				ManageOwnS3Credentials:    types.BoolValue(group.Policies.Management.ManageOwnS3Credentials),
-				RootAccess:                types.BoolValue(group.Policies.Management.RootAccess),
-				ViewAllContainers:         types.BoolValue(group.Policies.Management.ViewAllContainers),
-			},
+	// Map API response data to the flattened Terraform state model
+	state.DisplayName = types.StringValue(group.DisplayName)
+	state.UniqueName = types.StringValue(group.UniqueName)
+	state.Policies = &PoliciesModel{
+		S3: S3PolicyModel{
+			Version: types.StringValue(group.Policies.S3.Version),
+		},
+		Management: ManagementPolicyModel{
+			ManageAllContainers:       types.BoolValue(group.Policies.Management.ManageAllContainers),
+			ManageEndpoints:           types.BoolValue(group.Policies.Management.ManageEndpoints),
+			ManageOwnContainerObjects: types.BoolValue(group.Policies.Management.ManageOwnContainerObjects),
+			ManageOwnS3Credentials:    types.BoolValue(group.Policies.Management.ManageOwnS3Credentials),
+			RootAccess:                types.BoolValue(group.Policies.Management.RootAccess),
+			ViewAllContainers:         types.BoolValue(group.Policies.Management.ViewAllContainers),
 		},
 	}
 
@@ -279,7 +223,7 @@ func (d *GroupDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 		}
 		statements = append(statements, statementState)
 	}
-	state.Data.Policies.S3.Statement = statements
+	state.Policies.S3.Statement = statements
 
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
