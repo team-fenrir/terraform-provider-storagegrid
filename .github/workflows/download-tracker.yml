@@ -1,0 +1,150 @@
+name: Terraform Provider Download Tracker
+
+on:
+  schedule:
+    # Run daily at 9:00 AM UTC
+    - cron: '0 9 * * *'
+  workflow_dispatch: # Allow manual triggering
+
+env:
+  PROVIDER_NAMESPACE: team-fenrir
+  PROVIDER_NAME: storagegrid
+  DOWNLOADS_MILESTONE: 100
+
+jobs:
+  track-downloads:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Create downloads tracking directory
+      run: mkdir -p .downloads-tracker
+
+    - name: Download previous tracking data
+      uses: actions/cache/restore@v3
+      id: cache-restore
+      with:
+        path: .downloads-tracker/
+        key: downloads-tracker-${{ env.PROVIDER_NAMESPACE }}-${{ env.PROVIDER_NAME }}
+
+    - name: Track download milestones
+      id: track
+      run: |
+        #!/bin/bash
+        set -e
+
+        NAMESPACE="${{ env.PROVIDER_NAMESPACE }}"
+        NAME="${{ env.PROVIDER_NAME }}"
+        MILESTONE="${{ env.DOWNLOADS_MILESTONE }}"
+        TRACKING_FILE=".downloads-tracker/downloads.json"
+        TODAY=$(date +%Y-%m-%d)
+
+        echo "Checking downloads for provider: $NAMESPACE/$NAME"
+
+        # Try v2 API first, then fall back to scraping if needed
+        DOWNLOAD_COUNT=0
+        API_SUCCESS=false
+
+        # Attempt to get downloads from v2 API
+        if curl -s "https://registry.terraform.io/v2/providers/$NAMESPACE/$NAME/downloads/summary" | grep -q '"total"'; then
+          DOWNLOAD_COUNT=$(curl -s "https://registry.terraform.io/v2/providers/$NAMESPACE/$NAME/downloads/summary" | jq -r '.data.attributes.total // 0')
+          API_SUCCESS=true
+          echo "Successfully fetched downloads from v2 API: $DOWNLOAD_COUNT"
+        else
+          # Fallback: Try to scrape from the provider page
+          echo "v2 API not available, attempting to scrape from provider page..."
+          PROVIDER_PAGE=$(curl -s "https://registry.terraform.io/providers/$NAMESPACE/$NAME")
+
+          # This would need to be adapted based on actual HTML structure
+          # For now, we'll set a placeholder value
+          DOWNLOAD_COUNT=0
+          echo "Warning: Could not fetch download count. Setting to 0."
+        fi
+
+        # Initialize tracking file if it doesn't exist
+        if [ ! -f "$TRACKING_FILE" ]; then
+          echo '{"milestones": []}' > "$TRACKING_FILE"
+        fi
+
+        # Read previous data
+        LAST_MILESTONE=$(jq -r '.milestones | last | .download_count // 0' "$TRACKING_FILE")
+        LAST_MILESTONE_DATE=$(jq -r '.milestones | last | .date // ""' "$TRACKING_FILE")
+
+        echo "Current downloads: $DOWNLOAD_COUNT"
+        echo "Last milestone: $LAST_MILESTONE"
+        echo "Last milestone date: $LAST_MILESTONE_DATE"
+
+        # Check if we've hit a new milestone
+        if [ "$DOWNLOAD_COUNT" -ge $((LAST_MILESTONE + MILESTONE)) ]; then
+          NEW_MILESTONE=$((((DOWNLOAD_COUNT - LAST_MILESTONE) / MILESTONE) * MILESTONE + LAST_MILESTONE))
+
+          # Calculate days since last milestone
+          DAYS_SINCE=0
+          if [ -n "$LAST_MILESTONE_DATE" ]; then
+            DAYS_SINCE=$(( ($(date -d "$TODAY" +%s) - $(date -d "$LAST_MILESTONE_DATE" +%s)) / 86400 ))
+          fi
+
+          # Update tracking data
+          jq --arg date "$TODAY" \
+             --arg count "$NEW_MILESTONE" \
+             --arg days "$DAYS_SINCE" \
+             --arg total "$DOWNLOAD_COUNT" \
+             '.milestones += [{
+               "date": $date,
+               "download_count": ($count | tonumber),
+               "actual_count": ($total | tonumber),
+               "days_since_last": ($days | tonumber)
+             }]' "$TRACKING_FILE" > "$TRACKING_FILE.tmp" && mv "$TRACKING_FILE.tmp" "$TRACKING_FILE"
+
+          echo "🎉 New milestone reached!"
+          echo "milestone_reached=true" >> $GITHUB_OUTPUT
+          echo "milestone_count=$NEW_MILESTONE" >> $GITHUB_OUTPUT
+          echo "actual_count=$DOWNLOAD_COUNT" >> $GITHUB_OUTPUT
+          echo "days_since_last=$DAYS_SINCE" >> $GITHUB_OUTPUT
+
+          # Prepare Slack message
+          if [ "$DAYS_SINCE" -eq 0 ]; then
+            SLACK_MESSAGE="🚀 *Terraform Provider Milestone!* 🚀\n\nThe \`$NAMESPACE/$NAME\` provider has reached **$NEW_MILESTONE downloads**!\n\nCurrent total: **$DOWNLOAD_COUNT downloads**\n\nGreat work! 🎉"
+          else
+            SLACK_MESSAGE="🚀 *Terraform Provider Milestone!* 🚀\n\nThe \`$NAMESPACE/$NAME\` provider has reached **$NEW_MILESTONE downloads**!\n\nCurrent total: **$DOWNLOAD_COUNT downloads**\nDays since last milestone: **$DAYS_SINCE days**\n\nKeep up the momentum! 🎉"
+          fi
+
+          echo "slack_message<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$SLACK_MESSAGE" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+        else
+          echo "No milestone reached yet. Current: $DOWNLOAD_COUNT, Next milestone: $((LAST_MILESTONE + MILESTONE))"
+          echo "milestone_reached=false" >> $GITHUB_OUTPUT
+        fi
+      shell: bash
+
+    - name: Send Slack notification
+      if: steps.track.outputs.milestone_reached == 'true'
+      run: |
+        curl -X POST -H 'Content-type: application/json' \
+        --data "{\"text\":\"${{ steps.track.outputs.slack_message }}\"}" \
+        "${{ secrets.SLACK_WEBHOOK_URL }}"
+
+    - name: Cache tracking data
+      uses: actions/cache/save@v3
+      if: always()
+      with:
+        path: .downloads-tracker/
+        key: downloads-tracker-${{ env.PROVIDER_NAMESPACE }}-${{ env.PROVIDER_NAME }}-${{ github.run_id }}
+
+    - name: Commit tracking data (optional)
+      if: steps.track.outputs.milestone_reached == 'true'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add .downloads-tracker/
+        git commit -m "📊 Update download tracking data - milestone reached" || exit 0
+        git push || exit 0
