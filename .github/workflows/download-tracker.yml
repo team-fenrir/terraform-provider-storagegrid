@@ -139,4 +139,3 @@ jobs:
       with:
         path: .downloads-tracker/
         key: downloads-tracker-${{ env.PROVIDER_NAMESPACE }}-${{ env.PROVIDER_NAME }}-${{ github.run_id }}
-
