@@ -48,25 +48,10 @@ jobs:
 
         echo "Checking downloads for provider: $NAMESPACE/$NAME"
 
-        # Try v2 API first, then fall back to scraping if needed
-        DOWNLOAD_COUNT=0
-        API_SUCCESS=false
+        # Fetch downloads from v1 API
+        DOWNLOAD_COUNT=$(curl -s "https://registry.terraform.io/v1/providers/$NAMESPACE/$NAME" | jq '.downloads')
 
-        # Attempt to get downloads from v2 API
-        if curl -s "https://registry.terraform.io/v2/providers/$NAMESPACE/$NAME/downloads/summary" | grep -q '"total"'; then
-          DOWNLOAD_COUNT=$(curl -s "https://registry.terraform.io/v2/providers/$NAMESPACE/$NAME/downloads/summary" | jq -r '.data.attributes.total // 0')
-          API_SUCCESS=true
-          echo "Successfully fetched downloads from v2 API: $DOWNLOAD_COUNT"
-        else
-          # Fallback: Try to scrape from the provider page
-          echo "v2 API not available, attempting to scrape from provider page..."
-          PROVIDER_PAGE=$(curl -s "https://registry.terraform.io/providers/$NAMESPACE/$NAME")
-
-          # This would need to be adapted based on actual HTML structure
-          # For now, we'll set a placeholder value
-          DOWNLOAD_COUNT=0
-          echo "Warning: Could not fetch download count. Setting to 0."
-        fi
+        echo "Successfully fetched downloads from v1 API: $DOWNLOAD_COUNT"
 
         # Initialize tracking file if it doesn't exist
         if [ ! -f "$TRACKING_FILE" ]; then
@@ -139,4 +124,3 @@ jobs:
       with:
         path: .downloads-tracker/
         key: downloads-tracker-${{ env.PROVIDER_NAMESPACE }}-${{ env.PROVIDER_NAME }}-${{ github.run_id }}
-
