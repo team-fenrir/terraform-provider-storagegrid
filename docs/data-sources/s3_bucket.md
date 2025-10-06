@@ -38,15 +38,12 @@ output "bar_bucket_object_lock_enabled" {
 
 - `bucket_name` (String) The name of the S3 bucket to fetch.
 
-### Optional
-
-- `delete_status` (Attributes) Delete object status for the bucket. (see [below for nested schema](#nestedatt--delete_status))
-- `region` (String) The region where the bucket is located.
-- `s3_object_lock` (Attributes) S3 object lock configuration for the bucket. (see [below for nested schema](#nestedatt--s3_object_lock))
-
 ### Read-Only
 
 - `creation_time` (String) The time when the bucket was created.
+- `delete_status` (Attributes) Delete object status for the bucket. (see [below for nested schema](#nestedatt--delete_status))
+- `region` (String) The region where the bucket is located.
+- `s3_object_lock` (Attributes) S3 object lock configuration for the bucket. (see [below for nested schema](#nestedatt--s3_object_lock))
 
 <a id="nestedatt--delete_status"></a>
 ### Nested Schema for `delete_status`
@@ -61,22 +58,16 @@ Read-Only:
 <a id="nestedatt--s3_object_lock"></a>
 ### Nested Schema for `s3_object_lock`
 
-Optional:
-
-- `default_retention_setting` (Attributes) Default retention settings for object lock. (see [below for nested schema](#nestedatt--s3_object_lock--default_retention_setting))
-
 Read-Only:
 
+- `default_retention_setting` (Attributes) Default retention settings for object lock. (see [below for nested schema](#nestedatt--s3_object_lock--default_retention_setting))
 - `enabled` (Boolean) Indicates if S3 object lock is enabled.
 
 <a id="nestedatt--s3_object_lock--default_retention_setting"></a>
 ### Nested Schema for `s3_object_lock.default_retention_setting`
 
-Optional:
-
-- `days` (Number) Retention period in days.
-- `years` (Number) Retention period in years.
-
 Read-Only:
 
+- `days` (Number) Retention period in days.
 - `mode` (String) The retention mode (compliance or governance).
+- `years` (Number) Retention period in years.

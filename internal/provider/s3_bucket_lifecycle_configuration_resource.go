@@ -96,6 +96,9 @@ func (r *S3BucketLifecycleConfigurationResource) Schema(ctx context.Context, req
 							Description: "Unique identifier for the rule.",
 							Optional:    true,
 							Computed:    true,
+							PlanModifiers: []planmodifier.String{
+								stringplanmodifier.UseStateForUnknown(),
+							},
 						},
 						"status": schema.StringAttribute{
 							Description: "Status of the rule (Enabled or Disabled).",

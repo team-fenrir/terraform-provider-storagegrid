@@ -94,7 +94,7 @@ func (r *S3BucketObjectLockConfigurationResource) Schema(ctx context.Context, re
 						Description: "Retention period in years.",
 						Optional:    true,
 						Computed:    true,
-						Default:     int64default.StaticInt64(1),
+						Default:     int64default.StaticInt64(0),
 					},
 				},
 			},
