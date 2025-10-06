@@ -70,6 +70,9 @@ func (r *UserResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				Description: "The user's full name. If omitted, it defaults to the value of 'user_name'.",
 				Optional:    true,
 				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"member_of": schema.ListAttribute{
 				Description: "A list of group names that the user should be a member of. The groups must already exist.",

@@ -408,7 +408,7 @@ func (r *GroupResource) Update(ctx context.Context, req resource.UpdateRequest, 
 			Management: managementPayload,
 		},
 	}
-	id := plan.ID.ValueString()
+	id := state.ID.ValueString()
 	_, err := r.client.UpdateGroup(id, apiRequest)
 	if err != nil {
 		resp.Diagnostics.AddError(
