@@ -146,7 +146,7 @@ func (r *GroupResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						Attributes: map[string]schema.Attribute{
 							"manage_all_containers": schema.BoolAttribute{
 								Description: "Permission to manage all containers.",
-								Optional:    true, // QUESTION: Do we need computed? Do we need default {default} structure
+								Optional:    true,
 								Computed:    true,
 								Default:     booldefault.StaticBool(false),
 							},
@@ -228,10 +228,9 @@ func (r *GroupResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			},
 			"management_read_only": schema.BoolAttribute{
 				Description: "Indicates if the group has read-only management access.",
+				Optional:    true,
 				Computed:    true,
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
+				Default:     booldefault.StaticBool(false),
 			},
 		},
 	}
@@ -280,7 +279,7 @@ func (r *GroupResource) Create(ctx context.Context, req resource.CreateRequest, 
 	apiRequest := utils.GroupPayload{
 		UniqueName:         "group/" + groupName,
 		DisplayName:        groupName,
-		ManagementReadOnly: false,
+		ManagementReadOnly: plan.ManagementReadOnly.ValueBool(),
 		Policies: utils.Policies{
 			S3:         s3Payload,
 			Management: managementPayload,
@@ -403,7 +402,7 @@ func (r *GroupResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	apiRequest := utils.GroupPayload{
 		UniqueName:         "group/" + groupName,
 		DisplayName:        groupName,
-		ManagementReadOnly: false,
+		ManagementReadOnly: plan.ManagementReadOnly.ValueBool(),
 		Policies: utils.Policies{
 			S3:         s3Payload,
 			Management: managementPayload,

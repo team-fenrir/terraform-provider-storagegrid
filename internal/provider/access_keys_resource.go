@@ -64,6 +64,9 @@ func (r *AccessKeysResource) Schema(_ context.Context, _ resource.SchemaRequest,
 			"user_id": schema.StringAttribute{
 				Description: "The internal ID of the user.",
 				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"expires": schema.StringAttribute{
 				Description: "The expiration date for the access key in ISO 8601 format (e.g., '2028-09-04T00:00:00.000Z'). If omitted, the key will not expire.",
@@ -105,14 +108,23 @@ func (r *AccessKeysResource) Schema(_ context.Context, _ resource.SchemaRequest,
 			"display_name": schema.StringAttribute{
 				Description: "The display name of the access key.",
 				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"user_urn": schema.StringAttribute{
 				Description: "The URN of the user associated with the access key.",
 				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"account_id": schema.StringAttribute{
 				Description: "The account ID to which the user belongs.",
 				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 		},
 	}

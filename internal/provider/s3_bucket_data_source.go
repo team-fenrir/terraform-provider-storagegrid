@@ -75,12 +75,10 @@ func (d *S3BucketDataSource) Schema(_ context.Context, _ datasource.SchemaReques
 			"region": schema.StringAttribute{
 				Description: "The region where the bucket is located.",
 				Computed:    true,
-				Optional:    true,
 			},
 			"s3_object_lock": schema.SingleNestedAttribute{
 				Description: "S3 object lock configuration for the bucket.",
 				Computed:    true,
-				Optional:    true,
 				Attributes: map[string]schema.Attribute{
 					"enabled": schema.BoolAttribute{
 						Description: "Indicates if S3 object lock is enabled.",
@@ -89,7 +87,6 @@ func (d *S3BucketDataSource) Schema(_ context.Context, _ datasource.SchemaReques
 					"default_retention_setting": schema.SingleNestedAttribute{
 						Description: "Default retention settings for object lock.",
 						Computed:    true,
-						Optional:    true,
 						Attributes: map[string]schema.Attribute{
 							"mode": schema.StringAttribute{
 								Description: "The retention mode (compliance or governance).",
@@ -98,12 +95,10 @@ func (d *S3BucketDataSource) Schema(_ context.Context, _ datasource.SchemaReques
 							"days": schema.Int64Attribute{
 								Description: "Retention period in days.",
 								Computed:    true,
-								Optional:    true,
 							},
 							"years": schema.Int64Attribute{
 								Description: "Retention period in years.",
 								Computed:    true,
-								Optional:    true,
 							},
 						},
 					},
@@ -112,7 +107,6 @@ func (d *S3BucketDataSource) Schema(_ context.Context, _ datasource.SchemaReques
 			"delete_status": schema.SingleNestedAttribute{
 				Description: "Delete object status for the bucket.",
 				Computed:    true,
-				Optional:    true,
 				Attributes: map[string]schema.Attribute{
 					"is_deleting_objects": schema.BoolAttribute{
 						Description: "Indicates if objects are being deleted.",
