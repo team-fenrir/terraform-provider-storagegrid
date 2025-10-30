@@ -39,6 +39,11 @@ type UserPayload struct {
 	Disable    bool     `json:"disable"`
 }
 
+// ChangePasswordPayload defines the request body for changing a user's password.
+type ChangePasswordPayload struct {
+	Password string `json:"password"`
+}
+
 func (c *Client) GetUser(id string) (*UserAPIResponse, error) {
 	url := fmt.Sprintf("%s/api/v4/org/users/%s", c.EndpointURL, id)
 	log.Printf("Executing GET request to URL: %s", url)
@@ -130,6 +135,34 @@ func (c *Client) DeleteUser(id string) error {
 	_, err = c.doRequest(req)
 	if err != nil {
 		return fmt.Errorf("error executing DELETE request: %w", err)
+	}
+
+	return nil
+}
+
+// ChangeUserPassword updates the password for a local tenant user.
+// The shortName parameter should be the user's unique name (e.g., "user/username").
+func (c *Client) ChangeUserPassword(shortName string, password string) error {
+	payload := ChangePasswordPayload{
+		Password: password,
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("error marshaling change password payload: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/api/v4/org/users/%s/change-password", c.EndpointURL, shortName)
+	log.Printf("Executing POST request to URL: %s", url)
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		return fmt.Errorf("error creating change password request: %w", err)
+	}
+
+	_, err = c.doRequest(req)
+	if err != nil {
+		return fmt.Errorf("error executing change password request: %w", err)
 	}
 
 	return nil
