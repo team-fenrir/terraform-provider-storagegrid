@@ -95,7 +95,7 @@ func (r *S3BucketVersioningResource) Configure(ctx context.Context, req resource
 	r.client = client
 }
 
-// statusToAPIBools converts status string to API boolean fields
+// statusToAPIBools converts status string to API boolean fields.
 func statusToAPIBools(status string) (enabled bool, suspended bool) {
 	switch status {
 	case "Enabled":
@@ -108,7 +108,7 @@ func statusToAPIBools(status string) (enabled bool, suspended bool) {
 	}
 }
 
-// apiBoolsToStatus converts API boolean fields to status string
+// apiBoolsToStatus converts API boolean fields to status string.
 func apiBoolsToStatus(enabled bool, suspended bool) string {
 	if enabled {
 		return "Enabled"
