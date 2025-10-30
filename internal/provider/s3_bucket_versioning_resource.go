@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/team-fenrir/terraform-provider-storagegrid/internal/utils"
 )
@@ -36,10 +38,9 @@ type S3BucketVersioningResource struct {
 
 // S3BucketVersioningResourceModel describes the resource data model.
 type S3BucketVersioningResourceModel struct {
-	BucketName          types.String `tfsdk:"bucket_name"`
-	VersioningEnabled   types.Bool   `tfsdk:"versioning_enabled"`
-	VersioningSuspended types.Bool   `tfsdk:"versioning_suspended"`
-	ID                  types.String `tfsdk:"id"`
+	BucketName types.String `tfsdk:"bucket_name"`
+	Status     types.String `tfsdk:"status"`
+	ID         types.String `tfsdk:"id"`
 }
 
 func (r *S3BucketVersioningResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -57,17 +58,14 @@ func (r *S3BucketVersioningResource) Schema(ctx context.Context, req resource.Sc
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
-			"versioning_enabled": schema.BoolAttribute{
-				Description: "Whether versioning is enabled for the bucket.",
+			"status": schema.StringAttribute{
+				Description: "The versioning status for the bucket. Valid values are 'Enabled' or 'Suspended'. Defaults to 'Enabled'.",
 				Optional:    true,
 				Computed:    true,
-				Default:     booldefault.StaticBool(true),
-			},
-			"versioning_suspended": schema.BoolAttribute{
-				Description: "Whether versioning is suspended for the bucket.",
-				Optional:    true,
-				Computed:    true,
-				Default:     booldefault.StaticBool(false),
+				Default:     stringdefault.StaticString("Enabled"),
+				Validators: []validator.String{
+					stringvalidator.OneOf("Enabled", "Suspended"),
+				},
 			},
 			"id": schema.StringAttribute{
 				Description: "The unique identifier for the versioning configuration (same as bucket_name).",
@@ -97,6 +95,31 @@ func (r *S3BucketVersioningResource) Configure(ctx context.Context, req resource
 	r.client = client
 }
 
+// statusToAPIBools converts status string to API boolean fields.
+func statusToAPIBools(status string) (enabled bool, suspended bool) {
+	switch status {
+	case "Enabled":
+		return true, false
+	case "Suspended":
+		return false, true
+	default:
+		// Default to Enabled
+		return true, false
+	}
+}
+
+// apiBoolsToStatus converts API boolean fields to status string.
+func apiBoolsToStatus(enabled bool, suspended bool) string {
+	if enabled {
+		return "Enabled"
+	}
+	if suspended {
+		return "Suspended"
+	}
+	// Default to Enabled if both are false (shouldn't happen but safe default)
+	return "Enabled"
+}
+
 func (r *S3BucketVersioningResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan S3BucketVersioningResourceModel
 
@@ -106,8 +129,10 @@ func (r *S3BucketVersioningResource) Create(ctx context.Context, req resource.Cr
 	}
 
 	bucketName := plan.BucketName.ValueString()
-	versioningEnabled := plan.VersioningEnabled.ValueBool()
-	versioningSuspended := plan.VersioningSuspended.ValueBool()
+	status := plan.Status.ValueString()
+
+	// Convert status to API boolean fields
+	versioningEnabled, versioningSuspended := statusToAPIBools(status)
 
 	err := r.client.UpdateS3BucketVersioning(bucketName, versioningEnabled, versioningSuspended)
 	if err != nil {
@@ -151,9 +176,11 @@ func (r *S3BucketVersioningResource) Read(ctx context.Context, req resource.Read
 		return
 	}
 
+	// Convert API boolean fields to status string
+	status := apiBoolsToStatus(versioning.VersioningEnabled, versioning.VersioningSuspended)
+
 	// Update state with current values
-	state.VersioningEnabled = types.BoolValue(versioning.VersioningEnabled)
-	state.VersioningSuspended = types.BoolValue(versioning.VersioningSuspended)
+	state.Status = types.StringValue(status)
 	state.ID = types.StringValue(bucketName)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -168,8 +195,10 @@ func (r *S3BucketVersioningResource) Update(ctx context.Context, req resource.Up
 	}
 
 	bucketName := plan.BucketName.ValueString()
-	versioningEnabled := plan.VersioningEnabled.ValueBool()
-	versioningSuspended := plan.VersioningSuspended.ValueBool()
+	status := plan.Status.ValueString()
+
+	// Convert status to API boolean fields
+	versioningEnabled, versioningSuspended := statusToAPIBools(status)
 
 	err := r.client.UpdateS3BucketVersioning(bucketName, versioningEnabled, versioningSuspended)
 	if err != nil {
@@ -202,9 +231,7 @@ func (r *S3BucketVersioningResource) Delete(ctx context.Context, req resource.De
 
 	bucketName := state.BucketName.ValueString()
 
-	// When deleting the versioning resource, set versioning to suspended state
-	// (versioningEnabled=false, versioningSuspended=true) since StorageGrid
-	// requires at least one of them to be true
+	// When deleting the versioning resource, set versioning to Suspended
 	err := r.client.UpdateS3BucketVersioning(bucketName, false, true)
 	if err != nil {
 		// Check if this is a conflict due to object lock being enabled
@@ -241,12 +268,14 @@ func (r *S3BucketVersioningResource) ImportState(ctx context.Context, req resour
 		return
 	}
 
+	// Convert API boolean fields to status string
+	status := apiBoolsToStatus(versioning.VersioningEnabled, versioning.VersioningSuspended)
+
 	// Set the imported versioning configuration in state
 	state := S3BucketVersioningResourceModel{
-		BucketName:          types.StringValue(bucketName),
-		VersioningEnabled:   types.BoolValue(versioning.VersioningEnabled),
-		VersioningSuspended: types.BoolValue(versioning.VersioningSuspended),
-		ID:                  types.StringValue(bucketName),
+		BucketName: types.StringValue(bucketName),
+		Status:     types.StringValue(status),
+		ID:         types.StringValue(bucketName),
 	}
 
 	// Set the state

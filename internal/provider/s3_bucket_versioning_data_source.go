@@ -30,9 +30,8 @@ type S3BucketVersioningDataSource struct {
 
 // S3BucketVersioningDataSourceModel describes the data source data model.
 type S3BucketVersioningDataSourceModel struct {
-	BucketName          types.String `tfsdk:"bucket_name"`
-	VersioningEnabled   types.Bool   `tfsdk:"versioning_enabled"`
-	VersioningSuspended types.Bool   `tfsdk:"versioning_suspended"`
+	BucketName types.String `tfsdk:"bucket_name"`
+	Status     types.String `tfsdk:"status"`
 }
 
 func (d *S3BucketVersioningDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -47,12 +46,8 @@ func (d *S3BucketVersioningDataSource) Schema(ctx context.Context, req datasourc
 				Description: "The name of the S3 bucket to fetch versioning information for.",
 				Required:    true,
 			},
-			"versioning_enabled": schema.BoolAttribute{
-				Description: "Whether versioning is enabled for the bucket.",
-				Computed:    true,
-			},
-			"versioning_suspended": schema.BoolAttribute{
-				Description: "Whether versioning is suspended for the bucket.",
+			"status": schema.StringAttribute{
+				Description: "The versioning status for the bucket. Possible values are 'Enabled' or 'Suspended'.",
 				Computed:    true,
 			},
 		},
@@ -94,9 +89,11 @@ func (d *S3BucketVersioningDataSource) Read(ctx context.Context, req datasource.
 		return
 	}
 
+	// Convert API boolean fields to status string
+	status := apiBoolsToStatus(versioning.VersioningEnabled, versioning.VersioningSuspended)
+
 	// Map API response data to the Terraform state model
-	state.VersioningEnabled = types.BoolValue(versioning.VersioningEnabled)
-	state.VersioningSuspended = types.BoolValue(versioning.VersioningSuspended)
+	state.Status = types.StringValue(status)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

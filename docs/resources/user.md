@@ -77,6 +77,7 @@ resource "storagegrid_group" "bar" {
 - `disable` (Boolean) Set to true to disable the user account. Defaults to false.
 - `full_name` (String) The user's full name. If omitted, it defaults to the value of 'user_name'.
 - `member_of` (List of String) A list of group names that the user should be a member of. The groups must already exist.
+- `password` (String, Sensitive) The password for the user. This field is write-only and will not be read from the API. Setting this value will trigger a password update. Must be at least 8 characters long. Note: The password will be stored in plain text in the Terraform state file.
 
 ### Read-Only
 
