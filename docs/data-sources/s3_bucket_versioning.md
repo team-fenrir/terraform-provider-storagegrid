@@ -50,5 +50,4 @@ output "bar_versioning_id" {
 
 ### Read-Only
 
-- `versioning_enabled` (Boolean) Whether versioning is enabled for the bucket.
-- `versioning_suspended` (Boolean) Whether versioning is suspended for the bucket.
+- `status` (String) The versioning status for the bucket. Possible values are 'Enabled' or 'Suspended'.
