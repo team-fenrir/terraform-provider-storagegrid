@@ -7,9 +7,13 @@ import (
 	"context"
 	"flag"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/team-fenrir/terraform-provider-storagegrid/internal/provider"
+	"github.com/team-fenrir/terraform-provider-storagegrid/internal/utils"
 )
 
 var (
@@ -26,6 +30,25 @@ func main() {
 
 	flag.BoolVar(&debug, "debug", false, "set to true to run the provider with support for debuggers like delve")
 	flag.Parse()
+
+	// Setup cleanup handler for graceful shutdown
+	// This ensures temporary S3 access keys are deleted when the provider exits
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+
+	// Cleanup goroutine
+	go func() {
+		<-sigChan
+		log.Println("Received shutdown signal, cleaning up...")
+		utils.CleanupAllClients()
+		os.Exit(0)
+	}()
+
+	// Also cleanup on normal exit using defer
+	defer func() {
+		log.Println("Provider shutting down, cleaning up...")
+		utils.CleanupAllClients()
+	}()
 
 	opts := providerserver.ServeOpts{
 		// TODO: Update this string with the published name of your provider.
