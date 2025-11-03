@@ -695,11 +695,6 @@ func (c *Client) AcquireS3Client() (*minio.Client, error) {
 	return c.s3Client, nil
 }
 
-// GetS3Client is deprecated - use AcquireS3Client/ReleaseS3Client instead.
-func (c *Client) GetS3Client() (*minio.Client, error) {
-	return c.AcquireS3Client()
-}
-
 // clearS3ClientCache clears the S3 client cache WITHOUT deleting the access key.
 // The access key will expire automatically based on its expiration time.
 func (c *Client) clearS3ClientCache() {
@@ -750,19 +745,6 @@ func (c *Client) executeS3Operation(operation func(*minio.Client) error) error {
 	}
 
 	return err
-}
-
-// ReleaseS3Client is a no-op now that we use session-wide access keys.
-// The access key will expire automatically after 2 hours.
-// Deprecated: This function no longer does anything and will be removed in a future version.
-func (c *Client) ReleaseS3Client() {
-	// No-op: We keep the client cached for the entire provider session
-}
-
-// CleanupS3Client is deprecated and no longer does anything.
-// Access keys expire automatically after 2 hours.
-func (c *Client) CleanupS3Client() {
-	// No-op: We keep the client cached for the entire provider session
 }
 
 // GetS3AccessKey returns the current S3 access key (for debugging).
