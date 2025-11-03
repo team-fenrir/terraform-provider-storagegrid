@@ -16,30 +16,8 @@ import (
 	"github.com/minio/minio-go/v7"
 )
 
-// Global registry of clients that need cleanup
-var (
-	clientRegistry      = make([]*Client, 0)
-	clientRegistryMutex sync.Mutex
-)
-
-// RegisterClientForCleanup adds a client to the global cleanup registry.
-func registerClientForCleanup(c *Client) {
-	clientRegistryMutex.Lock()
-	defer clientRegistryMutex.Unlock()
-	clientRegistry = append(clientRegistry, c)
-}
-
-// CleanupAllClients cleans up all registered clients.
-func CleanupAllClients() {
-	clientRegistryMutex.Lock()
-	defer clientRegistryMutex.Unlock()
-
-	log.Printf("Cleaning up %d registered client(s)", len(clientRegistry))
-	for _, client := range clientRegistry {
-		client.cleanupS3AccessKey()
-	}
-	clientRegistry = nil
-}
+// Global reference to the active client for cleanup on exit.
+var activeClient *Client
 
 // Client holds the client configuration.
 type Client struct {
@@ -125,10 +103,18 @@ func NewClient(mgmtEndpoint, s3Endpoint *string, accountID, username, password *
 
 	c.Token = ar.Token
 
-	// Register this client for cleanup on exit
-	registerClientForCleanup(&c)
+	// Store reference to active client for cleanup on exit.
+	activeClient = &c
 
 	return &c, nil
+}
+
+// CleanupActiveClient cleans up the active client's S3 access key if one exists.
+// This should be called when the provider is shutting down.
+func CleanupActiveClient() {
+	if activeClient != nil {
+		activeClient.cleanupS3AccessKey()
+	}
 }
 
 // cleanupS3AccessKey cleans up the S3 access key if one exists.
@@ -137,9 +123,9 @@ func (c *Client) cleanupS3AccessKey() {
 	defer c.s3ClientMutex.Unlock()
 
 	if c.s3AccessKey != nil {
-		log.Printf("Deleting temporary access key (ID: %s) on shutdown", c.s3AccessKey.ID)
+		log.Printf("Cleaning up temporary access key (ID: %s)", c.s3AccessKey.ID)
 		if err := c.deleteAccessKey(c.s3AccessKey.ID); err != nil {
-			log.Printf("Warning: failed to delete temporary access key on shutdown: %v", err)
+			log.Printf("Warning: failed to delete temporary access key: %v", err)
 		} else {
 			log.Printf("Successfully deleted temporary access key (ID: %s)", c.s3AccessKey.ID)
 		}
