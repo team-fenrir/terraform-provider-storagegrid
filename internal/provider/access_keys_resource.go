@@ -138,9 +138,9 @@ func (r *AccessKeysResource) Create(ctx context.Context, req resource.CreateRequ
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
 			resp.Diagnostics.AddError("User Not Found", fmt.Sprintf("Could not find user with name: '%s'", userName))
-		} else {
-			resp.Diagnostics.AddError("API Error", fmt.Sprintf("Failed to get user '%s': %s", userName, err.Error()))
+			return
 		}
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Failed to get user '%s': %s", userName, err.Error()))
 		return
 	}
 	userID := apiUser.Data.ID

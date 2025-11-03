@@ -81,6 +81,7 @@ func (r *UserResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				Description: "A list of group names that the user should be a member of. The groups must already exist.",
 				ElementType: types.StringType,
 				Optional:    true,
+				Computed:    true,
 			},
 			"disable": schema.BoolAttribute{
 				Description: "Set to true to disable the user account. Defaults to false.",
@@ -208,12 +209,12 @@ func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, r
 					fmt.Sprintf("Password could not be set (%s), and cleanup also failed (%s). The user '%s' may exist in StorageGrid but is not managed by Terraform. You may need to manually delete it.",
 						err.Error(), deleteErr.Error(), createdUser.Data.UniqueName),
 				)
-			} else {
-				resp.Diagnostics.AddError(
-					"Error Setting User Password",
-					fmt.Sprintf("Password validation failed: %s. The user was not created (cleanup successful). Please fix the password and retry.", err.Error()),
-				)
+				return
 			}
+			resp.Diagnostics.AddError(
+				"Error Setting User Password",
+				fmt.Sprintf("Password validation failed: %s. The user was not created (cleanup successful). Please fix the password and retry.", err.Error()),
+			)
 			return
 		}
 	}
@@ -251,7 +252,7 @@ func (r *UserResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 
 	userData := apiUser.Data
 
-	var groupNames []string
+	groupNames := make([]string, 0)
 	for _, groupID := range userData.MemberOf {
 		group, err := r.client.GetGroup(groupID)
 		if err != nil {
@@ -342,7 +343,7 @@ func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, r
 
 	userData := apiUser.Data
 
-	var finalGroupNames []string
+	finalGroupNames := make([]string, 0)
 	for _, groupID := range userData.MemberOf {
 		group, err := r.client.GetGroup(groupID)
 		if err != nil {
