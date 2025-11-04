@@ -1,26 +1,11 @@
-# Enable versioning on the foo bucket
-resource "storagegrid_s3_bucket_versioning" "foo" {
-  bucket_name          = storagegrid_s3_bucket.foo.bucket_name
-  versioning_enabled   = true
-  versioning_suspended = false
+# Enable versioning on a bucket
+resource "storagegrid_s3_bucket_versioning" "data" {
+  bucket_name = storagegrid_s3_bucket.data.bucket_name
+  status      = "Enabled"
 }
 
-# Suspend versioning on the bar bucket
-resource "storagegrid_s3_bucket_versioning" "bar" {
-  bucket_name          = storagegrid_s3_bucket.bar.bucket_name
-  versioning_enabled   = false
-  versioning_suspended = true
-}
-
-# Reference the buckets created in the bucket example
-resource "storagegrid_s3_bucket" "foo" {
-  bucket_name = "foo-bucket"
-  region      = "us-east-1"
-}
-
-resource "storagegrid_s3_bucket" "bar" {
-  bucket_name = "bar-bucket"
-  region      = "us-east-1"
-  # Note: Cannot modify versioning on object lock enabled buckets
-  # object_lock_enabled = false
+# Suspend versioning on a bucket
+resource "storagegrid_s3_bucket_versioning" "archive" {
+  bucket_name = storagegrid_s3_bucket.archive.bucket_name
+  status      = "Suspended"
 }

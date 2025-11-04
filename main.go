@@ -10,6 +10,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/team-fenrir/terraform-provider-storagegrid/internal/provider"
+	"github.com/team-fenrir/terraform-provider-storagegrid/internal/utils"
 )
 
 var (
@@ -26,6 +27,9 @@ func main() {
 
 	flag.BoolVar(&debug, "debug", false, "set to true to run the provider with support for debuggers like delve")
 	flag.Parse()
+
+	// Ensure temporary S3 access keys are cleaned up when provider exits
+	defer utils.CleanupActiveClient()
 
 	opts := providerserver.ServeOpts{
 		// TODO: Update this string with the published name of your provider.

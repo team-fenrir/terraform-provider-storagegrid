@@ -8,11 +8,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/minio/minio-go/v7"
 )
+
+// Global reference to the active client for cleanup on exit.
+var activeClient *Client
 
 // Client holds the client configuration.
 type Client struct {
@@ -33,8 +38,11 @@ type Client struct {
 	bucketCacheTime time.Time
 
 	// S3 client cache for lifecycle operations
-	s3Client    *minio.Client
-	s3AccessKey *s3AccessKey
+	// The client and access key are created once and reused for the entire provider session
+	// Access keys expire after 2 hours and are not explicitly deleted
+	s3Client      *minio.Client
+	s3AccessKey   *s3AccessKey
+	s3ClientMutex sync.Mutex
 }
 
 // s3AccessKey represents temporary access keys for S3 operations.
@@ -95,7 +103,35 @@ func NewClient(mgmtEndpoint, s3Endpoint *string, accountID, username, password *
 
 	c.Token = ar.Token
 
+	// Store reference to active client for cleanup on exit.
+	activeClient = &c
+
 	return &c, nil
+}
+
+// CleanupActiveClient cleans up the active client's S3 access key if one exists.
+// This should be called when the provider is shutting down.
+func CleanupActiveClient() {
+	if activeClient != nil {
+		activeClient.cleanupS3AccessKey()
+	}
+}
+
+// cleanupS3AccessKey cleans up the S3 access key if one exists.
+func (c *Client) cleanupS3AccessKey() {
+	c.s3ClientMutex.Lock()
+	defer c.s3ClientMutex.Unlock()
+
+	if c.s3AccessKey != nil {
+		log.Printf("Cleaning up temporary access key (ID: %s)", c.s3AccessKey.ID)
+		if err := c.deleteAccessKey(c.s3AccessKey.ID); err != nil {
+			log.Printf("Warning: failed to delete temporary access key: %v", err)
+		} else {
+			log.Printf("Successfully deleted temporary access key (ID: %s)", c.s3AccessKey.ID)
+		}
+		c.s3AccessKey = nil
+		c.s3Client = nil
+	}
 }
 
 // SignIn handles the authentication process and retrieves a token.

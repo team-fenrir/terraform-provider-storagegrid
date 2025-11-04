@@ -596,8 +596,9 @@ func (c *Client) createTemporaryAccessKey() (*s3AccessKey, error) {
 	url := fmt.Sprintf("%s/api/v4/org/users/current-user/s3-access-keys", c.EndpointURL)
 	log.Printf("Creating temporary access key via URL: %s", url)
 
-	// Create request body for temporary access key with future expiration
-	expirationTime := time.Now().Add(24 * time.Hour) // Expire in 24 hours
+	// Create request body for temporary access key with 2-hour expiration
+	// This is long enough for any terraform operation but short enough to not accumulate
+	expirationTime := time.Now().Add(2 * time.Hour)
 	requestBody := []byte(fmt.Sprintf(`{"expires": "%s"}`, expirationTime.Format("2006-01-02T15:04:05.000Z")))
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
@@ -644,12 +645,21 @@ func (c *Client) deleteAccessKey(accessKeyID string) error {
 	return nil
 }
 
-// GetS3Client returns a cached MinIO client, creating it if necessary.
-func (c *Client) GetS3Client() (*minio.Client, error) {
+// AcquireS3Client returns a cached MinIO client, creating it if necessary.
+// The client and access key are reused across all operations during the provider session.
+// Access keys are created with a 2-hour expiration and are NOT cleaned up during the session
+// to avoid complex lifecycle management issues with Terraform's execution model.
+func (c *Client) AcquireS3Client() (*minio.Client, error) {
+	c.s3ClientMutex.Lock()
+	defer c.s3ClientMutex.Unlock()
+
 	// Return cached client if available
 	if c.s3Client != nil {
+		log.Printf("Reusing cached S3 client (access key ID: %s)", c.s3AccessKey.ID)
 		return c.s3Client, nil
 	}
+
+	log.Printf("No cached S3 client found, creating new access key")
 
 	// Create temporary access key
 	accessKey, err := c.createTemporaryAccessKey()
@@ -681,43 +691,47 @@ func (c *Client) GetS3Client() (*minio.Client, error) {
 	c.s3Client = minioClient
 	c.s3AccessKey = accessKey
 
-	log.Printf("Created and cached S3 client with temporary access key")
+	log.Printf("Created and cached S3 client with temporary access key (ID: %s, expires in 2 hours)", accessKey.ID)
 	return c.s3Client, nil
 }
 
-// clearS3ClientCache clears the S3 client cache and deletes the access key.
+// clearS3ClientCache clears the S3 client cache WITHOUT deleting the access key.
+// The access key will expire automatically based on its expiration time.
 func (c *Client) clearS3ClientCache() {
 	if c.s3AccessKey != nil {
-		if err := c.deleteAccessKey(c.s3AccessKey.ID); err != nil {
-			log.Printf("Warning: failed to delete temporary access key: %v", err)
-		}
+		log.Printf("Clearing S3 client cache (access key %s will expire automatically)", c.s3AccessKey.ID)
 	}
 	c.s3Client = nil
 	c.s3AccessKey = nil
 }
 
 // executeS3Operation executes an S3 operation with retry on authentication failure.
+// The S3 client and access key are cached and reused across operations.
 func (c *Client) executeS3Operation(operation func(*minio.Client) error) error {
-	client, err := c.GetS3Client()
+	client, err := c.AcquireS3Client()
 	if err != nil {
-		return fmt.Errorf("failed to get S3 client: %w", err)
+		return fmt.Errorf("failed to acquire S3 client: %w", err)
 	}
 
 	// Try the operation
 	err = operation(client)
 	if err != nil {
-		// Check if it's an authentication/authorization error that might indicate expired session
+		// Check if it's an authentication/authorization error that might indicate expired/invalid key
 		errStr := err.Error()
 		if strings.Contains(errStr, "AccessDenied") ||
 			strings.Contains(errStr, "InvalidAccessKey") ||
 			strings.Contains(errStr, "TokenRefreshRequired") ||
 			strings.Contains(errStr, "ExpiredToken") {
 
-			log.Printf("S3 operation failed with auth error, clearing cache and retrying: %v", err)
+			log.Printf("S3 operation failed with auth error, clearing cache and retrying with fresh key: %v", err)
 
-			// Clear cache and retry once
+			// Clear cache (but don't delete the old key) and retry once with a fresh key
+			c.s3ClientMutex.Lock()
 			c.clearS3ClientCache()
-			client, retryErr := c.GetS3Client()
+			c.s3ClientMutex.Unlock()
+
+			// Get a fresh client
+			client, retryErr := c.AcquireS3Client()
 			if retryErr != nil {
 				return fmt.Errorf("failed to refresh S3 client after auth error: %w", retryErr)
 			}
@@ -731,12 +745,6 @@ func (c *Client) executeS3Operation(operation func(*minio.Client) error) error {
 	}
 
 	return err
-}
-
-// CleanupS3Client cleans up the cached S3 client and deletes the temporary access key.
-func (c *Client) CleanupS3Client() {
-	c.clearS3ClientCache()
-	log.Printf("Cleaned up S3 client and deleted temporary access key")
 }
 
 // GetS3AccessKey returns the current S3 access key (for debugging).

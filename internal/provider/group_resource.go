@@ -59,20 +59,24 @@ func (m *normalizeDisplayNameModifier) PlanModifyString(ctx context.Context, req
 		// Fall back to UseStateForUnknown behavior
 		if req.StateValue.IsNull() {
 			resp.PlanValue = types.StringUnknown()
-		} else {
-			resp.PlanValue = req.StateValue
+			return
 		}
+		resp.PlanValue = req.StateValue
 		return
 	}
 
 	// Set display_name to match group_name
 	if !plan.GroupName.IsNull() && !plan.GroupName.IsUnknown() {
 		resp.PlanValue = types.StringValue(plan.GroupName.ValueString())
-	} else if req.StateValue.IsNull() {
-		resp.PlanValue = types.StringUnknown()
-	} else {
-		resp.PlanValue = req.StateValue
+		return
 	}
+
+	if req.StateValue.IsNull() {
+		resp.PlanValue = types.StringUnknown()
+		return
+	}
+
+	resp.PlanValue = req.StateValue
 }
 
 func NewGroupResource() resource.Resource {

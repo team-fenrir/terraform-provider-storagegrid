@@ -13,12 +13,12 @@ Manages lifecycle configuration for a StorageGrid S3 bucket.
 ## Example Usage
 
 ```terraform
-# Configure lifecycle rules for the foo bucket
-resource "storagegrid_s3_bucket_lifecycle_configuration" "foo" {
-  bucket_name = storagegrid_s3_bucket.foo.bucket_name
+# Configure lifecycle with multiple rules and filters
+resource "storagegrid_s3_bucket_lifecycle_configuration" "data" {
+  bucket_name = storagegrid_s3_bucket.data.bucket_name
 
   rule {
-    id     = "foo-logs-expiration"
+    id     = "logs-expiration"
     status = "Enabled"
 
     filter {
@@ -28,10 +28,14 @@ resource "storagegrid_s3_bucket_lifecycle_configuration" "foo" {
     expiration {
       days = 90
     }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
   }
 
   rule {
-    id     = "foo-temp-cleanup"
+    id     = "temp-cleanup"
     status = "Enabled"
 
     filter {
@@ -48,54 +52,22 @@ resource "storagegrid_s3_bucket_lifecycle_configuration" "foo" {
   }
 }
 
-# Configure lifecycle rules for the bar bucket with date-based expiration
-resource "storagegrid_s3_bucket_lifecycle_configuration" "bar" {
-  bucket_name = storagegrid_s3_bucket.bar.bucket_name
+# Configure lifecycle with date-based expiration
+resource "storagegrid_s3_bucket_lifecycle_configuration" "archive" {
+  bucket_name = storagegrid_s3_bucket.archive.bucket_name
 
   rule {
-    id     = "bar-archive-cleanup"
+    id     = "archive-cleanup"
     status = "Enabled"
 
-    filter {
-      prefix = "archive/"
+    expiration {
+      date = "2026-12-31T00:00:00.000Z"
     }
 
-    expiration {
-      date = "2025-12-31T00:00:00Z"
+    noncurrent_version_expiration {
+      noncurrent_days = 90
     }
   }
-}
-
-# Simple lifecycle configuration for baz bucket (all objects)
-resource "storagegrid_s3_bucket_lifecycle_configuration" "baz" {
-  bucket_name = storagegrid_s3_bucket.baz.bucket_name
-
-  rule {
-    id     = "baz-global-expiration"
-    status = "Enabled"
-
-    # No filter = applies to all objects
-
-    expiration {
-      days = 365
-    }
-  }
-}
-
-# Reference the buckets created in the bucket example
-resource "storagegrid_s3_bucket" "foo" {
-  bucket_name = "foo-bucket"
-  region      = "us-east-1"
-}
-
-resource "storagegrid_s3_bucket" "bar" {
-  bucket_name = "bar-bucket"
-  region      = "us-east-1"
-}
-
-resource "storagegrid_s3_bucket" "baz" {
-  bucket_name = "baz-bucket"
-  region      = "us-east-1"
 }
 ```
 

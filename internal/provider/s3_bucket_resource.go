@@ -165,10 +165,11 @@ func (r *S3BucketResource) Read(ctx context.Context, req resource.ReadRequest, r
 	if err != nil {
 		// If object lock API fails, assume object lock is disabled
 		state.ObjectLockEnabled = types.BoolValue(false)
-	} else {
-		state.ObjectLockEnabled = types.BoolValue(objectLock.Enabled)
+		resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+		return
 	}
 
+	state.ObjectLockEnabled = types.BoolValue(objectLock.Enabled)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -238,9 +239,12 @@ func (r *S3BucketResource) ImportState(ctx context.Context, req resource.ImportS
 	if err != nil {
 		// If object lock API fails, assume object lock is disabled
 		state.ObjectLockEnabled = types.BoolValue(false)
-	} else {
-		state.ObjectLockEnabled = types.BoolValue(objectLock.Enabled)
+		resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+		resource.ImportStatePassthroughID(ctx, path.Root("bucket_name"), req, resp)
+		return
 	}
+
+	state.ObjectLockEnabled = types.BoolValue(objectLock.Enabled)
 
 	// Set the state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
