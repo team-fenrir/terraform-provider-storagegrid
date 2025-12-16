@@ -19,7 +19,7 @@ func TestAccGroupResource_WithCondition(t *testing.T) {
 resource "storagegrid_group" "test" {
   group_name = "test-group-with-condition"
 
-  policies {
+  policies = {
     s3 = jsonencode({
       Statement = [
         {
@@ -57,7 +57,7 @@ resource "storagegrid_group" "test" {
       ]
     })
 
-    management {
+    management = {
       manage_own_s3_credentials = true
     }
   }
@@ -96,7 +96,7 @@ resource "storagegrid_group" "test" {
 resource "storagegrid_group" "test" {
   group_name = "test-group-with-condition"
 
-  policies {
+  policies = {
     s3 = jsonencode({
       Statement = [
         {
@@ -134,7 +134,7 @@ resource "storagegrid_group" "test" {
       ]
     })
 
-    management {
+    management = {
       manage_own_s3_credentials = true
     }
   }
@@ -161,7 +161,7 @@ func TestAccGroupResource_MultipleConditionOperators(t *testing.T) {
 resource "storagegrid_group" "test" {
   group_name = "test-group-multi-condition"
 
-  policies {
+  policies = {
     s3 = jsonencode({
       Statement = [
         {
@@ -184,7 +184,7 @@ resource "storagegrid_group" "test" {
       ]
     })
 
-    management {
+    management = {
       manage_own_s3_credentials = false
     }
   }
@@ -210,7 +210,7 @@ func TestAccGroupResource_WithoutCondition(t *testing.T) {
 resource "storagegrid_group" "test" {
   group_name = "test-group-no-condition"
 
-  policies {
+  policies = {
     s3 = jsonencode({
       Statement = [
         {
@@ -231,7 +231,7 @@ resource "storagegrid_group" "test" {
       ]
     })
 
-    management {
+    management = {
       root_access = true
     }
   }
@@ -250,7 +250,7 @@ resource "storagegrid_group" "test" {
 resource "storagegrid_group" "test" {
   group_name = "test-group-no-condition"
 
-  policies {
+  policies = {
     s3 = jsonencode({
       Statement = [
         {
@@ -276,7 +276,7 @@ resource "storagegrid_group" "test" {
       ]
     })
 
-    management {
+    management = {
       root_access = true
     }
   }
@@ -301,7 +301,7 @@ func TestAccGroupResource_ComplexPolicy(t *testing.T) {
 resource "storagegrid_group" "test" {
   group_name = "test-group-complex"
 
-  policies {
+  policies = {
     s3 = jsonencode({
       Statement = [
         {
@@ -342,7 +342,7 @@ resource "storagegrid_group" "test" {
       ]
     })
 
-    management {
+    management = {
       manage_own_s3_credentials = true
       view_all_containers       = true
     }
