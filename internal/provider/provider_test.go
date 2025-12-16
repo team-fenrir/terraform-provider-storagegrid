@@ -24,9 +24,9 @@ var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServe
 func testAccPreCheck(t *testing.T) {
 	t.Helper()
 
-	// Check if acceptance tests are enabled
-	if os.Getenv("TF_ACC") == "" {
-		t.Skip("Acceptance tests skipped unless env 'TF_ACC' is set")
+	// Check if acceptance tests are enabled (must be explicitly "1")
+	if os.Getenv("TF_ACC") != "1" {
+		t.Skip("Acceptance tests skipped unless env 'TF_ACC=1' is set")
 	}
 
 	// Check required environment variables
@@ -37,10 +37,15 @@ func testAccPreCheck(t *testing.T) {
 		"STORAGEGRID_PASSWORD",
 	}
 
+	missingVars := []string{}
 	for _, envVar := range requiredEnvVars {
 		if os.Getenv(envVar) == "" {
-			t.Fatalf("Environment variable %s must be set for acceptance tests", envVar)
+			missingVars = append(missingVars, envVar)
 		}
+	}
+
+	if len(missingVars) > 0 {
+		t.Skipf("Acceptance tests skipped: missing required environment variables: %v", missingVars)
 	}
 }
 
