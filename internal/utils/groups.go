@@ -46,10 +46,11 @@ type S3Policy struct {
 
 // Statement defines a single rule within a policy.
 type Statement struct {
-	Sid      string        `json:"Sid,omitempty"`
-	Effect   string        `json:"Effect"`
-	Action   StringOrSlice `json:"Action"`
-	Resource StringOrSlice `json:"Resource"`
+	Sid       string                              `json:"Sid,omitempty"`
+	Effect    string                              `json:"Effect"`
+	Action    StringOrSlice                       `json:"Action"`
+	Resource  StringOrSlice                       `json:"Resource"`
+	Condition map[string]map[string]StringOrSlice `json:"Condition,omitempty"`
 }
 
 type ManagementPolicy struct {
