@@ -265,8 +265,17 @@ func TestStatementWithCondition_Marshal(t *testing.T) {
 				if err := json.Unmarshal([]byte(jsonOutput), &raw); err != nil {
 					t.Fatalf("Failed to unmarshal output: %v", err)
 				}
-				statements := raw["Statement"].([]interface{})
-				stmt := statements[0].(map[string]interface{})
+				statements, ok := raw["Statement"].([]interface{})
+				if !ok {
+					t.Fatal("Statement field is not an array")
+				}
+				if len(statements) == 0 {
+					t.Fatal("Statement array is empty")
+				}
+				stmt, ok := statements[0].(map[string]interface{})
+				if !ok {
+					t.Fatal("Statement[0] is not a map")
+				}
 				if _, exists := stmt["Condition"]; exists {
 					t.Error("Condition field should be omitted when nil due to omitempty tag")
 				}
