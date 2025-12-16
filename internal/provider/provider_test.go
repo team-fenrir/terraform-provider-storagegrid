@@ -4,6 +4,9 @@
 package provider
 
 import (
+	"os"
+	"testing"
+
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 )
@@ -16,14 +19,40 @@ var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServe
 	"storagegrid": providerserver.NewProtocol6WithError(New("test")()),
 }
 
+// testAccPreCheck validates that the required environment variables are set
+// for acceptance tests to run.
+func testAccPreCheck(t *testing.T) {
+	t.Helper()
+
+	// Check if acceptance tests are enabled
+	if os.Getenv("TF_ACC") == "" {
+		t.Skip("Acceptance tests skipped unless env 'TF_ACC' is set")
+	}
+
+	// Check required environment variables
+	requiredEnvVars := []string{
+		"STORAGEGRID_ENDPOINT",
+		"STORAGEGRID_ACCOUNTID",
+		"STORAGEGRID_USERNAME",
+		"STORAGEGRID_PASSWORD",
+	}
+
+	for _, envVar := range requiredEnvVars {
+		if os.Getenv(envVar) == "" {
+			t.Fatalf("Environment variable %s must be set for acceptance tests", envVar)
+		}
+	}
+}
+
+// providerConfig returns the provider configuration using environment variables.
+// This allows tests to connect to a real StorageGRID instance.
 const providerConfig = `
 provider "storagegrid" {
-  endpoints {
-    mgmt = "https://storagegrid.example.com"
-    s3   = "https://s3.storagegrid.example.com"
-  }
-  accountid = "12345678901234567890"
-  username  = "root"
-  password  = "password"
+  # Configuration is read from environment variables:
+  # - STORAGEGRID_ENDPOINT
+  # - STORAGEGRID_S3_ENDPOINT (optional)
+  # - STORAGEGRID_ACCOUNTID
+  # - STORAGEGRID_USERNAME
+  # - STORAGEGRID_PASSWORD
 }
 `

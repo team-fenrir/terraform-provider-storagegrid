@@ -11,6 +11,7 @@ import (
 
 func TestAccGroupResource_WithCondition(t *testing.T) {
 	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			// Create and Read testing with Condition
@@ -153,6 +154,7 @@ resource "storagegrid_group" "test" {
 
 func TestAccGroupResource_MultipleConditionOperators(t *testing.T) {
 	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			// Create with multiple condition operators
@@ -202,6 +204,7 @@ resource "storagegrid_group" "test" {
 
 func TestAccGroupResource_WithoutCondition(t *testing.T) {
 	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			// Create without Condition (backward compatibility test)
@@ -293,6 +296,7 @@ resource "storagegrid_group" "test" {
 
 func TestAccGroupResource_ComplexPolicy(t *testing.T) {
 	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			// Create with the example from the issue
