@@ -133,7 +133,7 @@ func (r *S3BucketLifecycleConfigurationResource) Schema(ctx context.Context, req
 							Attributes: map[string]schema.Attribute{
 								"noncurrent_days": schema.Int64Attribute{
 									Description: "Number of days after an object becomes noncurrent when it expires.",
-									Required:    true,
+									Optional:    true,
 								},
 							},
 						},

@@ -54,3 +54,21 @@ resource "storagegrid_s3_bucket_lifecycle_configuration" "archive" {
     }
   }
 }
+
+# Configure lifecycle without noncurrent version expiration (for non-versioned buckets)
+resource "storagegrid_s3_bucket_lifecycle_configuration" "simple" {
+  bucket_name = storagegrid_s3_bucket.simple.bucket_name
+
+  rule {
+    id     = "cleanup-old-objects"
+    status = "Enabled"
+
+    filter {
+      prefix = "data/"
+    }
+
+    expiration {
+      days = 30
+    }
+  }
+}
