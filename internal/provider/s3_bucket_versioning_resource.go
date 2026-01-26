@@ -116,8 +116,9 @@ func apiBoolsToStatus(enabled bool, suspended bool) string {
 	if suspended {
 		return "Suspended"
 	}
-	// Default to Enabled if both are false (shouldn't happen but safe default)
-	return "Enabled"
+	// Default to Disabled if both are false, meaning bucket hasn't had versioning enabled yet
+	// Once a bucket has versioning enabled it can only toggle between Enabled and Suspended
+	return "Disabled"
 }
 
 func (r *S3BucketVersioningResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
