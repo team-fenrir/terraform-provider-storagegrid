@@ -50,4 +50,4 @@ output "bar_versioning_id" {
 
 ### Read-Only
 
-- `status` (String) The versioning status for the bucket. Possible values are 'Enabled' or 'Suspended'.
+- `status` (String) The versioning status for the bucket. Possible values are 'Disabled', 'Enabled' or 'Suspended'.
