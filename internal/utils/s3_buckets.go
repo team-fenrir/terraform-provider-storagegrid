@@ -160,9 +160,18 @@ func (c *Client) getCachedBucketList() ([]S3BucketData, error) {
 	}
 
 	// Cache is expired or empty, fetch fresh data
-	url := fmt.Sprintf("%s/api/v4/org/containers", c.EndpointURL)
+	reqUrl, err := url.Parse(fmt.Sprintf("%s/api/v4/org/containers", c.EndpointURL))
+	if err != nil {
+		return nil, fmt.Errorf("error creating request url: %w", err)
+	}
+	// Add query params (See: <storagegrid>/ui/apidocs.html#/containers/get_org_containers
+	queryParams := reqUrl.Query()
+	// Add include query param to load region and ObjectLock values
+	// Available values : compliance, region, s3ObjectLock, deleteObjects, crossGridReplication, quotaObjectBytes
+	queryParams.Add("include", "region,s3ObjectLock")
+	reqUrl.RawQuery = queryParams.Encode()
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("GET", reqUrl.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
