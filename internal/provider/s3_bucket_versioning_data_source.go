@@ -47,7 +47,7 @@ func (d *S3BucketVersioningDataSource) Schema(ctx context.Context, req datasourc
 				Required:    true,
 			},
 			"status": schema.StringAttribute{
-				Description: "The versioning status for the bucket. Possible values are 'Enabled' or 'Suspended'.",
+				Description: "The versioning status for the bucket. Possible values are 'Disabled', 'Enabled' or 'Suspended'.",
 				Computed:    true,
 			},
 		},
