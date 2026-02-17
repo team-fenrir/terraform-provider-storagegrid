@@ -59,7 +59,7 @@ func (r *S3BucketVersioningResource) Schema(ctx context.Context, req resource.Sc
 				},
 			},
 			"status": schema.StringAttribute{
-				Description: "The versioning status for the bucket. Valid values are 'Enabled' or 'Suspended'. Defaults to 'Enabled'.",
+				Description: "The versioning status for the bucket. Valid values to set are 'Enabled' or 'Suspended'. When reading, may also return 'Disabled' for buckets where versioning has never been enabled. Defaults to 'Enabled'.",
 				Optional:    true,
 				Computed:    true,
 				Default:     stringdefault.StaticString("Enabled"),

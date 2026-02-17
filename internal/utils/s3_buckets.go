@@ -17,9 +17,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
-	"github.com/minio/minio-go/v7/pkg/lifecycle"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+)
+
+const (
+	// bucketListIncludeParams specifies which additional fields to include when listing S3 buckets
+	// Available values: compliance, region, s3ObjectLock, deleteObjects, crossGridReplication, quotaObjectBytes
+	bucketListIncludeParams = "region,s3ObjectLock"
 )
 
 // S3BucketAPIResponse represents the API response structure for S3 bucket data.
@@ -167,8 +174,7 @@ func (c *Client) getCachedBucketList() ([]S3BucketData, error) {
 	// Add query params (See: <storagegrid>/ui/apidocs.html#/containers/get_org_containers
 	queryParams := reqUrl.Query()
 	// Add include query param to load region and ObjectLock values
-	// Available values : compliance, region, s3ObjectLock, deleteObjects, crossGridReplication, quotaObjectBytes
-	queryParams.Add("include", "region,s3ObjectLock")
+	queryParams.Add("include", bucketListIncludeParams)
 	reqUrl.RawQuery = queryParams.Encode()
 
 	req, err := http.NewRequest("GET", reqUrl.String(), nil)
@@ -654,11 +660,11 @@ func (c *Client) deleteAccessKey(accessKeyID string) error {
 	return nil
 }
 
-// AcquireS3Client returns a cached MinIO client, creating it if necessary.
+// AcquireS3Client returns a cached AWS S3 client, creating it if necessary.
 // The client and access key are reused across all operations during the provider session.
 // Access keys are created with a 2-hour expiration and are NOT cleaned up during the session
 // to avoid complex lifecycle management issues with Terraform's execution model.
-func (c *Client) AcquireS3Client() (*minio.Client, error) {
+func (c *Client) AcquireS3Client() (*s3.Client, error) {
 	c.s3ClientMutex.Lock()
 	defer c.s3ClientMutex.Unlock()
 
@@ -682,22 +688,17 @@ func (c *Client) AcquireS3Client() (*minio.Client, error) {
 		return nil, fmt.Errorf("failed to get S3 endpoint URL: %w", err)
 	}
 
-	parsedURL, err := url.Parse(s3EndpointURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse S3 endpoint URL: %w", err)
-	}
-
-	// Create MinIO client
-	minioClient, err := minio.New(parsedURL.Host, &minio.Options{
-		Creds:  credentials.NewStaticV4(accessKey.AccessKey, accessKey.SecretKey, ""),
-		Secure: parsedURL.Scheme == "https",
+	// Create AWS S3 client with custom endpoint
+	s3Client := s3.NewFromConfig(aws.Config{
+		Region:      "us-east-1", // StorageGRID doesn't use regions but AWS SDK requires one
+		Credentials: credentials.NewStaticCredentialsProvider(accessKey.AccessKey, accessKey.SecretKey, ""),
+	}, func(o *s3.Options) {
+		o.BaseEndpoint = aws.String(s3EndpointURL)
+		o.UsePathStyle = true // StorageGRID uses path-style URLs
 	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create MinIO client: %w", err)
-	}
 
 	// Cache the client and access key
-	c.s3Client = minioClient
+	c.s3Client = s3Client
 	c.s3AccessKey = accessKey
 
 	log.Printf("Created and cached S3 client with temporary access key (ID: %s, expires in 2 hours)", accessKey.ID)
@@ -716,7 +717,7 @@ func (c *Client) clearS3ClientCache() {
 
 // executeS3Operation executes an S3 operation with retry on authentication failure.
 // The S3 client and access key are cached and reused across operations.
-func (c *Client) executeS3Operation(operation func(*minio.Client) error) error {
+func (c *Client) executeS3Operation(operation func(*s3.Client) error) error {
 	client, err := c.AcquireS3Client()
 	if err != nil {
 		return fmt.Errorf("failed to acquire S3 client: %w", err)
@@ -766,48 +767,50 @@ func (c *Client) GetS3BucketLifecycleConfiguration(bucketName string) (*Lifecycl
 	var result *LifecycleConfiguration
 	var operationErr error
 
-	err := c.executeS3Operation(func(client *minio.Client) error {
+	err := c.executeS3Operation(func(client *s3.Client) error {
 		log.Printf("Getting lifecycle configuration for bucket: %s", bucketName)
 
-		// Get lifecycle configuration using MinIO client
-		lifecycle, err := client.GetBucketLifecycle(context.Background(), bucketName)
+		// Get lifecycle configuration using AWS SDK
+		output, err := client.GetBucketLifecycleConfiguration(context.Background(), &s3.GetBucketLifecycleConfigurationInput{
+			Bucket: aws.String(bucketName),
+		})
 		if err != nil {
 			return fmt.Errorf("error getting bucket lifecycle configuration: %w", err)
 		}
 
-		// Convert MinIO lifecycle to our struct
+		// Convert AWS SDK lifecycle to our struct
 		lifecycleConfig := &LifecycleConfiguration{
-			Rules: make([]Rule, len(lifecycle.Rules)),
+			Rules: make([]Rule, len(output.Rules)),
 		}
 
-		for i, rule := range lifecycle.Rules {
+		for i, rule := range output.Rules {
 			lifecycleRule := Rule{
-				ID:     rule.ID,
-				Status: rule.Status,
+				ID:     aws.ToString(rule.ID),
+				Status: string(rule.Status),
 			}
 
 			// Handle filter
-			if rule.RuleFilter.Prefix != "" {
+			if rule.Filter != nil && rule.Filter.Prefix != nil {
 				lifecycleRule.Filter = &Filter{
-					Prefix: rule.RuleFilter.Prefix,
+					Prefix: aws.ToString(rule.Filter.Prefix),
 				}
 			}
 
 			// Handle expiration
-			if rule.Expiration.Days > 0 || !rule.Expiration.Date.IsZero() {
+			if rule.Expiration != nil {
 				lifecycleRule.Expiration = &Expiration{}
-				if rule.Expiration.Days > 0 {
-					lifecycleRule.Expiration.Days = int(rule.Expiration.Days)
+				if rule.Expiration.Days != nil {
+					lifecycleRule.Expiration.Days = int(*rule.Expiration.Days)
 				}
-				if !rule.Expiration.Date.IsZero() {
+				if rule.Expiration.Date != nil {
 					lifecycleRule.Expiration.Date = rule.Expiration.Date.Format("2006-01-02T15:04:05.000Z")
 				}
 			}
 
 			// Handle noncurrent version expiration
-			if rule.NoncurrentVersionExpiration.NoncurrentDays > 0 {
+			if rule.NoncurrentVersionExpiration != nil && rule.NoncurrentVersionExpiration.NoncurrentDays != nil {
 				lifecycleRule.NoncurrentVersionExpiration = &NoncurrentVersionExpiration{
-					NoncurrentDays: int(rule.NoncurrentVersionExpiration.NoncurrentDays),
+					NoncurrentDays: int(*rule.NoncurrentVersionExpiration.NoncurrentDays),
 				}
 			}
 
@@ -830,48 +833,55 @@ func (c *Client) GetS3BucketLifecycleConfiguration(bucketName string) (*Lifecycl
 
 // PutS3BucketLifecycleConfiguration sets lifecycle configuration for a specific S3 bucket.
 func (c *Client) PutS3BucketLifecycleConfiguration(bucketName string, lifecycleConfig *LifecycleConfiguration) error {
-	return c.executeS3Operation(func(client *minio.Client) error {
+	return c.executeS3Operation(func(client *s3.Client) error {
 		log.Printf("Setting lifecycle configuration for bucket: %s", bucketName)
 
-		// Convert our struct to MinIO lifecycle format using the proper lifecycle package
-		config := lifecycle.NewConfiguration()
-		config.Rules = make([]lifecycle.Rule, len(lifecycleConfig.Rules))
+		// Convert our struct to AWS SDK lifecycle format
+		rules := make([]types.LifecycleRule, len(lifecycleConfig.Rules))
 
 		for i, rule := range lifecycleConfig.Rules {
-			minioRule := lifecycle.Rule{
-				ID:     rule.ID,
-				Status: rule.Status,
+			awsRule := types.LifecycleRule{
+				ID:     aws.String(rule.ID),
+				Status: types.ExpirationStatus(rule.Status),
 			}
 
 			// Handle filter
 			if rule.Filter != nil {
-				minioRule.RuleFilter = lifecycle.Filter{
-					Prefix: rule.Filter.Prefix,
+				awsRule.Filter = &types.LifecycleRuleFilter{
+					Prefix: aws.String(rule.Filter.Prefix),
 				}
 			}
 
 			// Handle expiration
 			if rule.Expiration != nil {
+				awsRule.Expiration = &types.LifecycleExpiration{}
 				if rule.Expiration.Days > 0 {
-					minioRule.Expiration.Days = lifecycle.ExpirationDays(rule.Expiration.Days)
+					awsRule.Expiration.Days = aws.Int32(int32(rule.Expiration.Days))
 				}
 				if rule.Expiration.Date != "" {
 					if date, err := time.Parse("2006-01-02T15:04:05.000Z", rule.Expiration.Date); err == nil {
-						minioRule.Expiration.Date = lifecycle.ExpirationDate{Time: date}
+						awsRule.Expiration.Date = aws.Time(date)
 					}
 				}
 			}
 
 			// Handle noncurrent version expiration
 			if rule.NoncurrentVersionExpiration != nil {
-				minioRule.NoncurrentVersionExpiration.NoncurrentDays = lifecycle.ExpirationDays(rule.NoncurrentVersionExpiration.NoncurrentDays)
+				awsRule.NoncurrentVersionExpiration = &types.NoncurrentVersionExpiration{
+					NoncurrentDays: aws.Int32(int32(rule.NoncurrentVersionExpiration.NoncurrentDays)),
+				}
 			}
 
-			config.Rules[i] = minioRule
+			rules[i] = awsRule
 		}
 
-		// Set lifecycle configuration using MinIO client
-		err := client.SetBucketLifecycle(context.Background(), bucketName, config)
+		// Set lifecycle configuration using AWS SDK
+		_, err := client.PutBucketLifecycleConfiguration(context.Background(), &s3.PutBucketLifecycleConfigurationInput{
+			Bucket: aws.String(bucketName),
+			LifecycleConfiguration: &types.BucketLifecycleConfiguration{
+				Rules: rules,
+			},
+		})
 		if err != nil {
 			return fmt.Errorf("error setting bucket lifecycle configuration: %w", err)
 		}
@@ -882,11 +892,13 @@ func (c *Client) PutS3BucketLifecycleConfiguration(bucketName string, lifecycleC
 
 // DeleteS3BucketLifecycleConfiguration deletes lifecycle configuration for a specific S3 bucket.
 func (c *Client) DeleteS3BucketLifecycleConfiguration(bucketName string) error {
-	return c.executeS3Operation(func(client *minio.Client) error {
+	return c.executeS3Operation(func(client *s3.Client) error {
 		log.Printf("Deleting lifecycle configuration for bucket: %s", bucketName)
 
-		// Remove lifecycle configuration using MinIO client
-		err := client.SetBucketLifecycle(context.Background(), bucketName, lifecycle.NewConfiguration())
+		// Remove lifecycle configuration using AWS SDK
+		_, err := client.DeleteBucketLifecycle(context.Background(), &s3.DeleteBucketLifecycleInput{
+			Bucket: aws.String(bucketName),
+		})
 		if err != nil {
 			return fmt.Errorf("error removing bucket lifecycle configuration: %w", err)
 		}

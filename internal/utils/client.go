@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/minio/minio-go/v7"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 // Global reference to the active client for cleanup on exit.
@@ -40,7 +40,7 @@ type Client struct {
 	// S3 client cache for lifecycle operations
 	// The client and access key are created once and reused for the entire provider session
 	// Access keys expire after 2 hours and are not explicitly deleted
-	s3Client      *minio.Client
+	s3Client      *s3.Client
 	s3AccessKey   *s3AccessKey
 	s3ClientMutex sync.Mutex
 }
