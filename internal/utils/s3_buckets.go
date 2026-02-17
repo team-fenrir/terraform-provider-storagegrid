@@ -24,8 +24,8 @@ import (
 )
 
 const (
-	// bucketListIncludeParams specifies which additional fields to include when listing S3 buckets
-	// Available values: compliance, region, s3ObjectLock, deleteObjects, crossGridReplication, quotaObjectBytes
+	// bucketListIncludeParams specifies which additional fields to include when listing S3 buckets.
+	// Available values: compliance, region, s3ObjectLock, deleteObjects, crossGridReplication, quotaObjectBytes.
 	bucketListIncludeParams = "region,s3ObjectLock"
 )
 
