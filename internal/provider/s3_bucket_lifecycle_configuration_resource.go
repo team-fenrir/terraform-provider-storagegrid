@@ -189,8 +189,9 @@ func (r *S3BucketLifecycleConfigurationResource) Create(ctx context.Context, req
 			}
 		}
 
-		// Handle expiration
-		if rule.Expiration != nil {
+		// Handle expiration - only set if at least one field has a value
+		// This prevents creating empty XML elements which the minio-go library (>=7.0.98) rejects
+		if rule.Expiration != nil && (!rule.Expiration.Days.IsNull() || !rule.Expiration.Date.IsNull()) {
 			apiRule.Expiration = &utils.Expiration{}
 			if !rule.Expiration.Days.IsNull() {
 				apiRule.Expiration.Days = int(rule.Expiration.Days.ValueInt64())
@@ -318,8 +319,9 @@ func (r *S3BucketLifecycleConfigurationResource) Update(ctx context.Context, req
 			}
 		}
 
-		// Handle expiration
-		if rule.Expiration != nil {
+		// Handle expiration - only set if at least one field has a value
+		// This prevents creating empty XML elements which the minio-go library (>=7.0.98) rejects
+		if rule.Expiration != nil && (!rule.Expiration.Days.IsNull() || !rule.Expiration.Date.IsNull()) {
 			apiRule.Expiration = &utils.Expiration{}
 			if !rule.Expiration.Days.IsNull() {
 				apiRule.Expiration.Days = int(rule.Expiration.Days.ValueInt64())

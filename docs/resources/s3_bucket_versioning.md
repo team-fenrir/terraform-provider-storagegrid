@@ -35,7 +35,7 @@ resource "storagegrid_s3_bucket_versioning" "archive" {
 
 ### Optional
 
-- `status` (String) The versioning status for the bucket. Valid values are 'Enabled' or 'Suspended'. Defaults to 'Enabled'.
+- `status` (String) The versioning status for the bucket. Valid values to set are 'Enabled' or 'Suspended'. When reading, may also return 'Disabled' for buckets where versioning has never been enabled. Defaults to 'Enabled'.
 
 ### Read-Only
 
