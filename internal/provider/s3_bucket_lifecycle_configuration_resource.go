@@ -7,11 +7,13 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/boolvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/team-fenrir/terraform-provider-storagegrid/internal/utils"
 )
@@ -130,6 +132,12 @@ func (r *S3BucketLifecycleConfigurationResource) Schema(ctx context.Context, req
 								"expired_object_delete_marker": schema.BoolAttribute{
 									Description: "Indicates whether StorageGrid removes expired object delete markers (delete markers with no noncurrent versions). Cannot be combined with days or date.",
 									Optional:    true,
+									Validators: []validator.Bool{
+										boolvalidator.ConflictsWith(
+											path.MatchRelative().AtParent().AtName("days"),
+											path.MatchRelative().AtParent().AtName("date"),
+										),
+									},
 								},
 							},
 						},
