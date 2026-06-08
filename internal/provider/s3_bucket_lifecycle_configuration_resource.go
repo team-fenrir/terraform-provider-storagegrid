@@ -67,6 +67,42 @@ type LifecycleNoncurrentVersionResourceModel struct {
 	NoncurrentDays types.Int64 `tfsdk:"noncurrent_days"`
 }
 
+// nonEmptyFilterValidator ensures that a declared filter block specifies a
+// non-empty prefix. StorageGrid always stores (and returns) a <Filter> element,
+// so an empty prefix is indistinguishable from no filter on read — both mean
+// "apply to all objects". Allowing an empty filter block would canonicalize to
+// no filter in state and produce a perpetual diff, so we require it to be
+// omitted instead.
+type nonEmptyFilterValidator struct{}
+
+func (v nonEmptyFilterValidator) Description(ctx context.Context) string {
+	return "filter block must specify a non-empty prefix; omit the filter block to apply the rule to all objects"
+}
+
+func (v nonEmptyFilterValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+
+func (v nonEmptyFilterValidator) ValidateObject(ctx context.Context, req validator.ObjectRequest, resp *validator.ObjectResponse) {
+	// Block omitted entirely (the supported "match all" form), or not yet known.
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+
+	prefix, ok := req.ConfigValue.Attributes()["prefix"].(types.String)
+	if !ok || prefix.IsUnknown() {
+		return
+	}
+
+	if prefix.IsNull() || prefix.ValueString() == "" {
+		resp.Diagnostics.AddAttributeError(
+			req.Path,
+			"Invalid Filter Configuration",
+			"The filter block must specify a non-empty prefix. To apply the rule to all objects, omit the filter block entirely.",
+		)
+	}
+}
+
 func (r *S3BucketLifecycleConfigurationResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_s3_bucket_lifecycle_configuration"
 }
@@ -110,12 +146,15 @@ func (r *S3BucketLifecycleConfigurationResource) Schema(ctx context.Context, req
 					},
 					Blocks: map[string]schema.Block{
 						"filter": schema.SingleNestedBlock{
-							Description: "Filter for the lifecycle rule.",
+							Description: "Filter for the lifecycle rule. Omit this block to apply the rule to all objects.",
 							Attributes: map[string]schema.Attribute{
 								"prefix": schema.StringAttribute{
 									Description: "Object key prefix that identifies the objects to which the rule applies.",
 									Optional:    true,
 								},
+							},
+							Validators: []validator.Object{
+								nonEmptyFilterValidator{},
 							},
 						},
 						"expiration": schema.SingleNestedBlock{
