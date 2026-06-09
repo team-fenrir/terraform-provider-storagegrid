@@ -114,7 +114,7 @@ Required:
 Optional:
 
 - `expiration` (Block, Optional) Expiration settings for current object versions. (see [below for nested schema](#nestedblock--rule--expiration))
-- `filter` (Block, Optional) Filter for the lifecycle rule. (see [below for nested schema](#nestedblock--rule--filter))
+- `filter` (Block, Optional) Filter for the lifecycle rule. Omit this block to apply the rule to all objects. (see [below for nested schema](#nestedblock--rule--filter))
 - `id` (String) Unique identifier for the rule.
 - `noncurrent_version_expiration` (Block, Optional) Expiration settings for noncurrent object versions. (see [below for nested schema](#nestedblock--rule--noncurrent_version_expiration))
 
@@ -125,6 +125,7 @@ Optional:
 
 - `date` (String) Date when objects expire (ISO 8601 format).
 - `days` (Number) Number of days after object creation when the object expires.
+- `expired_object_delete_marker` (Boolean) Indicates whether StorageGrid removes expired object delete markers (delete markers with no noncurrent versions). Cannot be combined with days or date.
 
 
 <a id="nestedblock--rule--filter"></a>

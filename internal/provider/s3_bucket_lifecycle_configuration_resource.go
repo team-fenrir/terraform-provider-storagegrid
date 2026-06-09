@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2025, 2026
 // SPDX-License-Identifier: MPL-2.0
 
 package provider
@@ -7,11 +7,13 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/boolvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/team-fenrir/terraform-provider-storagegrid/internal/utils"
 )
@@ -55,13 +57,50 @@ type LifecycleFilterResourceModel struct {
 
 // LifecycleExpirationResourceModel represents expiration settings.
 type LifecycleExpirationResourceModel struct {
-	Days types.Int64  `tfsdk:"days"`
-	Date types.String `tfsdk:"date"`
+	Days                      types.Int64  `tfsdk:"days"`
+	Date                      types.String `tfsdk:"date"`
+	ExpiredObjectDeleteMarker types.Bool   `tfsdk:"expired_object_delete_marker"`
 }
 
 // LifecycleNoncurrentVersionResourceModel represents noncurrent version expiration settings.
 type LifecycleNoncurrentVersionResourceModel struct {
 	NoncurrentDays types.Int64 `tfsdk:"noncurrent_days"`
+}
+
+// nonEmptyFilterValidator ensures that a declared filter block specifies a
+// non-empty prefix. StorageGrid always stores (and returns) a <Filter> element,
+// so an empty prefix is indistinguishable from no filter on read — both mean
+// "apply to all objects". Allowing an empty filter block would canonicalize to
+// no filter in state and produce a perpetual diff, so we require it to be
+// omitted instead.
+type nonEmptyFilterValidator struct{}
+
+func (v nonEmptyFilterValidator) Description(ctx context.Context) string {
+	return "filter block must specify a non-empty prefix; omit the filter block to apply the rule to all objects"
+}
+
+func (v nonEmptyFilterValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+
+func (v nonEmptyFilterValidator) ValidateObject(ctx context.Context, req validator.ObjectRequest, resp *validator.ObjectResponse) {
+	// Block omitted entirely (the supported "match all" form), or not yet known.
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+
+	prefix, ok := req.ConfigValue.Attributes()["prefix"].(types.String)
+	if !ok || prefix.IsUnknown() {
+		return
+	}
+
+	if prefix.IsNull() || prefix.ValueString() == "" {
+		resp.Diagnostics.AddAttributeError(
+			req.Path,
+			"Invalid Filter Configuration",
+			"The filter block must specify a non-empty prefix. To apply the rule to all objects, omit the filter block entirely.",
+		)
+	}
 }
 
 func (r *S3BucketLifecycleConfigurationResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -107,12 +146,15 @@ func (r *S3BucketLifecycleConfigurationResource) Schema(ctx context.Context, req
 					},
 					Blocks: map[string]schema.Block{
 						"filter": schema.SingleNestedBlock{
-							Description: "Filter for the lifecycle rule.",
+							Description: "Filter for the lifecycle rule. Omit this block to apply the rule to all objects.",
 							Attributes: map[string]schema.Attribute{
 								"prefix": schema.StringAttribute{
 									Description: "Object key prefix that identifies the objects to which the rule applies.",
 									Optional:    true,
 								},
+							},
+							Validators: []validator.Object{
+								nonEmptyFilterValidator{},
 							},
 						},
 						"expiration": schema.SingleNestedBlock{
@@ -125,6 +167,16 @@ func (r *S3BucketLifecycleConfigurationResource) Schema(ctx context.Context, req
 								"date": schema.StringAttribute{
 									Description: "Date when objects expire (ISO 8601 format).",
 									Optional:    true,
+								},
+								"expired_object_delete_marker": schema.BoolAttribute{
+									Description: "Indicates whether StorageGrid removes expired object delete markers (delete markers with no noncurrent versions). Cannot be combined with days or date.",
+									Optional:    true,
+									Validators: []validator.Bool{
+										boolvalidator.ConflictsWith(
+											path.MatchRelative().AtParent().AtName("days"),
+											path.MatchRelative().AtParent().AtName("date"),
+										),
+									},
 								},
 							},
 						},
@@ -161,22 +213,13 @@ func (r *S3BucketLifecycleConfigurationResource) Configure(ctx context.Context, 
 	r.client = client
 }
 
-func (r *S3BucketLifecycleConfigurationResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var plan S3BucketLifecycleConfigurationResourceModel
-
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	bucketName := plan.BucketName.ValueString()
-
-	// Convert Terraform model to API model
+// buildLifecycleConfiguration converts the Terraform rule models into the API model.
+func buildLifecycleConfiguration(rules []LifecycleRuleResourceModel) *utils.LifecycleConfiguration {
 	lifecycleConfig := &utils.LifecycleConfiguration{
-		Rules: make([]utils.Rule, len(plan.Rules)),
+		Rules: make([]utils.Rule, len(rules)),
 	}
 
-	for i, rule := range plan.Rules {
+	for i, rule := range rules {
 		apiRule := utils.Rule{
 			ID:     rule.ID.ValueString(),
 			Status: rule.Status.ValueString(),
@@ -191,13 +234,17 @@ func (r *S3BucketLifecycleConfigurationResource) Create(ctx context.Context, req
 
 		// Handle expiration - only set if at least one field has a value
 		// This prevents creating empty XML elements which the minio-go library (>=7.0.98) rejects
-		if rule.Expiration != nil && (!rule.Expiration.Days.IsNull() || !rule.Expiration.Date.IsNull()) {
+		if rule.Expiration != nil && (!rule.Expiration.Days.IsNull() || !rule.Expiration.Date.IsNull() || !rule.Expiration.ExpiredObjectDeleteMarker.IsNull()) {
 			apiRule.Expiration = &utils.Expiration{}
 			if !rule.Expiration.Days.IsNull() {
 				apiRule.Expiration.Days = int(rule.Expiration.Days.ValueInt64())
 			}
 			if !rule.Expiration.Date.IsNull() {
 				apiRule.Expiration.Date = rule.Expiration.Date.ValueString()
+			}
+			if !rule.Expiration.ExpiredObjectDeleteMarker.IsNull() {
+				marker := rule.Expiration.ExpiredObjectDeleteMarker.ValueBool()
+				apiRule.Expiration.ExpiredObjectDeleteMarker = &marker
 			}
 		}
 
@@ -210,6 +257,71 @@ func (r *S3BucketLifecycleConfigurationResource) Create(ctx context.Context, req
 
 		lifecycleConfig.Rules[i] = apiRule
 	}
+
+	return lifecycleConfig
+}
+
+// mapLifecycleRules converts the API model into the Terraform rule models.
+func mapLifecycleRules(lifecycleConfig *utils.LifecycleConfiguration) []LifecycleRuleResourceModel {
+	var rules []LifecycleRuleResourceModel
+	for _, rule := range lifecycleConfig.Rules {
+		ruleModel := LifecycleRuleResourceModel{
+			ID:     types.StringValue(rule.ID),
+			Status: types.StringValue(rule.Status),
+		}
+
+		// Handle filter
+		if rule.Filter != nil {
+			ruleModel.Filter = &LifecycleFilterResourceModel{
+				Prefix: types.StringValue(rule.Filter.Prefix),
+			}
+		}
+
+		// Handle expiration
+		if rule.Expiration != nil {
+			ruleModel.Expiration = &LifecycleExpirationResourceModel{}
+			if rule.Expiration.Days > 0 {
+				ruleModel.Expiration.Days = types.Int64Value(int64(rule.Expiration.Days))
+			} else {
+				ruleModel.Expiration.Days = types.Int64Null()
+			}
+			if rule.Expiration.Date != "" {
+				ruleModel.Expiration.Date = types.StringValue(rule.Expiration.Date)
+			} else {
+				ruleModel.Expiration.Date = types.StringNull()
+			}
+			if rule.Expiration.ExpiredObjectDeleteMarker != nil {
+				ruleModel.Expiration.ExpiredObjectDeleteMarker = types.BoolValue(*rule.Expiration.ExpiredObjectDeleteMarker)
+			} else {
+				ruleModel.Expiration.ExpiredObjectDeleteMarker = types.BoolNull()
+			}
+		}
+
+		// Handle noncurrent version expiration
+		if rule.NoncurrentVersionExpiration != nil {
+			ruleModel.NoncurrentVersionExpiration = &LifecycleNoncurrentVersionResourceModel{
+				NoncurrentDays: types.Int64Value(int64(rule.NoncurrentVersionExpiration.NoncurrentDays)),
+			}
+		}
+
+		rules = append(rules, ruleModel)
+	}
+
+	return rules
+}
+
+func (r *S3BucketLifecycleConfigurationResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var plan S3BucketLifecycleConfigurationResourceModel
+
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	bucketName := plan.BucketName.ValueString()
+
+	// Convert Terraform model to API model
+	lifecycleConfig := buildLifecycleConfiguration(plan.Rules)
 
 	err := r.client.PutS3BucketLifecycleConfiguration(bucketName, lifecycleConfig)
 	if err != nil {
@@ -246,46 +358,7 @@ func (r *S3BucketLifecycleConfigurationResource) Read(ctx context.Context, req r
 	}
 
 	// Convert API model to Terraform model
-	var rules []LifecycleRuleResourceModel
-	for _, rule := range lifecycleConfig.Rules {
-		ruleModel := LifecycleRuleResourceModel{
-			ID:     types.StringValue(rule.ID),
-			Status: types.StringValue(rule.Status),
-		}
-
-		// Handle filter
-		if rule.Filter != nil {
-			ruleModel.Filter = &LifecycleFilterResourceModel{
-				Prefix: types.StringValue(rule.Filter.Prefix),
-			}
-		}
-
-		// Handle expiration
-		if rule.Expiration != nil {
-			ruleModel.Expiration = &LifecycleExpirationResourceModel{}
-			if rule.Expiration.Days > 0 {
-				ruleModel.Expiration.Days = types.Int64Value(int64(rule.Expiration.Days))
-			} else {
-				ruleModel.Expiration.Days = types.Int64Null()
-			}
-			if rule.Expiration.Date != "" {
-				ruleModel.Expiration.Date = types.StringValue(rule.Expiration.Date)
-			} else {
-				ruleModel.Expiration.Date = types.StringNull()
-			}
-		}
-
-		// Handle noncurrent version expiration
-		if rule.NoncurrentVersionExpiration != nil {
-			ruleModel.NoncurrentVersionExpiration = &LifecycleNoncurrentVersionResourceModel{
-				NoncurrentDays: types.Int64Value(int64(rule.NoncurrentVersionExpiration.NoncurrentDays)),
-			}
-		}
-
-		rules = append(rules, ruleModel)
-	}
-
-	state.Rules = rules
+	state.Rules = mapLifecycleRules(lifecycleConfig)
 	state.ID = types.StringValue(bucketName)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -302,44 +375,7 @@ func (r *S3BucketLifecycleConfigurationResource) Update(ctx context.Context, req
 	bucketName := plan.BucketName.ValueString()
 
 	// Convert Terraform model to API model
-	lifecycleConfig := &utils.LifecycleConfiguration{
-		Rules: make([]utils.Rule, len(plan.Rules)),
-	}
-
-	for i, rule := range plan.Rules {
-		apiRule := utils.Rule{
-			ID:     rule.ID.ValueString(),
-			Status: rule.Status.ValueString(),
-		}
-
-		// Handle filter
-		if rule.Filter != nil {
-			apiRule.Filter = &utils.Filter{
-				Prefix: rule.Filter.Prefix.ValueString(),
-			}
-		}
-
-		// Handle expiration - only set if at least one field has a value
-		// This prevents creating empty XML elements which the minio-go library (>=7.0.98) rejects
-		if rule.Expiration != nil && (!rule.Expiration.Days.IsNull() || !rule.Expiration.Date.IsNull()) {
-			apiRule.Expiration = &utils.Expiration{}
-			if !rule.Expiration.Days.IsNull() {
-				apiRule.Expiration.Days = int(rule.Expiration.Days.ValueInt64())
-			}
-			if !rule.Expiration.Date.IsNull() {
-				apiRule.Expiration.Date = rule.Expiration.Date.ValueString()
-			}
-		}
-
-		// Handle noncurrent version expiration
-		if rule.NoncurrentVersionExpiration != nil {
-			apiRule.NoncurrentVersionExpiration = &utils.NoncurrentVersionExpiration{
-				NoncurrentDays: int(rule.NoncurrentVersionExpiration.NoncurrentDays.ValueInt64()),
-			}
-		}
-
-		lifecycleConfig.Rules[i] = apiRule
-	}
+	lifecycleConfig := buildLifecycleConfiguration(plan.Rules)
 
 	err := r.client.PutS3BucketLifecycleConfiguration(bucketName, lifecycleConfig)
 	if err != nil {
@@ -390,50 +426,10 @@ func (r *S3BucketLifecycleConfigurationResource) ImportState(ctx context.Context
 		return
 	}
 
-	// Convert API model to Terraform model
-	var rules []LifecycleRuleResourceModel
-	for _, rule := range lifecycleConfig.Rules {
-		ruleModel := LifecycleRuleResourceModel{
-			ID:     types.StringValue(rule.ID),
-			Status: types.StringValue(rule.Status),
-		}
-
-		// Handle filter
-		if rule.Filter != nil {
-			ruleModel.Filter = &LifecycleFilterResourceModel{
-				Prefix: types.StringValue(rule.Filter.Prefix),
-			}
-		}
-
-		// Handle expiration
-		if rule.Expiration != nil {
-			ruleModel.Expiration = &LifecycleExpirationResourceModel{}
-			if rule.Expiration.Days > 0 {
-				ruleModel.Expiration.Days = types.Int64Value(int64(rule.Expiration.Days))
-			} else {
-				ruleModel.Expiration.Days = types.Int64Null()
-			}
-			if rule.Expiration.Date != "" {
-				ruleModel.Expiration.Date = types.StringValue(rule.Expiration.Date)
-			} else {
-				ruleModel.Expiration.Date = types.StringNull()
-			}
-		}
-
-		// Handle noncurrent version expiration
-		if rule.NoncurrentVersionExpiration != nil {
-			ruleModel.NoncurrentVersionExpiration = &LifecycleNoncurrentVersionResourceModel{
-				NoncurrentDays: types.Int64Value(int64(rule.NoncurrentVersionExpiration.NoncurrentDays)),
-			}
-		}
-
-		rules = append(rules, ruleModel)
-	}
-
 	// Set the imported lifecycle configuration in state
 	state := S3BucketLifecycleConfigurationResourceModel{
 		BucketName: types.StringValue(bucketName),
-		Rules:      rules,
+		Rules:      mapLifecycleRules(lifecycleConfig),
 		ID:         types.StringValue(bucketName),
 	}
 

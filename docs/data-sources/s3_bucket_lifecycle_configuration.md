@@ -76,6 +76,7 @@ Optional:
 
 - `date` (String) Date when objects expire (ISO 8601 format).
 - `days` (Number) Number of days after object creation when the object expires.
+- `expired_object_delete_marker` (Boolean) Indicates whether StorageGrid removes expired object delete markers (delete markers with no noncurrent versions).
 
 
 <a id="nestedblock--rule--filter"></a>

@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2025, 2026
 // SPDX-License-Identifier: MPL-2.0
 
 package utils
@@ -578,8 +578,9 @@ type Filter struct {
 
 // Expiration represents expiration settings for current versions.
 type Expiration struct {
-	Days int    `xml:"Days,omitempty"`
-	Date string `xml:"Date,omitempty"`
+	Days                      int    `xml:"Days,omitempty"`
+	Date                      string `xml:"Date,omitempty"`
+	ExpiredObjectDeleteMarker *bool  `xml:"ExpiredObjectDeleteMarker,omitempty"`
 }
 
 // NoncurrentVersionExpiration represents expiration settings for noncurrent versions.
@@ -789,8 +790,11 @@ func (c *Client) GetS3BucketLifecycleConfiguration(bucketName string) (*Lifecycl
 				Status: string(rule.Status),
 			}
 
-			// Handle filter
-			if rule.Filter != nil && rule.Filter.Prefix != nil {
+			// Handle filter. StorageGrid returns an empty <Filter> element for rules
+			// created without one; an empty prefix matches all objects and is
+			// equivalent to no filter, so don't materialize it into state (otherwise a
+			// config that omits the filter block produces a perpetual diff).
+			if rule.Filter != nil && aws.ToString(rule.Filter.Prefix) != "" {
 				lifecycleRule.Filter = &Filter{
 					Prefix: aws.ToString(rule.Filter.Prefix),
 				}
@@ -804,6 +808,9 @@ func (c *Client) GetS3BucketLifecycleConfiguration(bucketName string) (*Lifecycl
 				}
 				if rule.Expiration.Date != nil {
 					lifecycleRule.Expiration.Date = rule.Expiration.Date.Format("2006-01-02T15:04:05.000Z")
+				}
+				if rule.Expiration.ExpiredObjectDeleteMarker != nil {
+					lifecycleRule.Expiration.ExpiredObjectDeleteMarker = rule.Expiration.ExpiredObjectDeleteMarker
 				}
 			}
 
@@ -845,11 +852,15 @@ func (c *Client) PutS3BucketLifecycleConfiguration(bucketName string, lifecycleC
 				Status: types.ExpirationStatus(rule.Status),
 			}
 
-			// Handle filter
-			if rule.Filter != nil {
+			// Handle filter. The v2 lifecycle schema requires every rule to carry a
+			// <Filter> element; omitting it results in a MalformedXML error. An empty
+			// filter matches all objects, so send one whenever no prefix is configured.
+			if rule.Filter != nil && rule.Filter.Prefix != "" {
 				awsRule.Filter = &types.LifecycleRuleFilter{
 					Prefix: aws.String(rule.Filter.Prefix),
 				}
+			} else {
+				awsRule.Filter = &types.LifecycleRuleFilter{}
 			}
 
 			// Handle expiration
@@ -862,6 +873,9 @@ func (c *Client) PutS3BucketLifecycleConfiguration(bucketName string, lifecycleC
 					if date, err := time.Parse("2006-01-02T15:04:05.000Z", rule.Expiration.Date); err == nil {
 						awsRule.Expiration.Date = aws.Time(date)
 					}
+				}
+				if rule.Expiration.ExpiredObjectDeleteMarker != nil {
+					awsRule.Expiration.ExpiredObjectDeleteMarker = rule.Expiration.ExpiredObjectDeleteMarker
 				}
 			}
 

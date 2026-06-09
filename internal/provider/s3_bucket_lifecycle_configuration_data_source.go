@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2025, 2026
 // SPDX-License-Identifier: MPL-2.0
 
 package provider
@@ -50,8 +50,9 @@ type LifecycleFilterDataSourceModel struct {
 
 // LifecycleExpirationDataSourceModel represents expiration settings.
 type LifecycleExpirationDataSourceModel struct {
-	Days types.Int64  `tfsdk:"days"`
-	Date types.String `tfsdk:"date"`
+	Days                      types.Int64  `tfsdk:"days"`
+	Date                      types.String `tfsdk:"date"`
+	ExpiredObjectDeleteMarker types.Bool   `tfsdk:"expired_object_delete_marker"`
 }
 
 // LifecycleNoncurrentVersionDataSourceModel represents noncurrent version expiration settings.
@@ -107,6 +108,11 @@ func (d *S3BucketLifecycleConfigurationDataSource) Schema(ctx context.Context, r
 								},
 								"date": schema.StringAttribute{
 									Description: "Date when objects expire (ISO 8601 format).",
+									Computed:    true,
+									Optional:    true,
+								},
+								"expired_object_delete_marker": schema.BoolAttribute{
+									Description: "Indicates whether StorageGrid removes expired object delete markers (delete markers with no noncurrent versions).",
 									Computed:    true,
 									Optional:    true,
 								},
@@ -191,6 +197,11 @@ func (d *S3BucketLifecycleConfigurationDataSource) Read(ctx context.Context, req
 				ruleModel.Expiration.Date = types.StringValue(rule.Expiration.Date)
 			} else {
 				ruleModel.Expiration.Date = types.StringNull()
+			}
+			if rule.Expiration.ExpiredObjectDeleteMarker != nil {
+				ruleModel.Expiration.ExpiredObjectDeleteMarker = types.BoolValue(*rule.Expiration.ExpiredObjectDeleteMarker)
+			} else {
+				ruleModel.Expiration.ExpiredObjectDeleteMarker = types.BoolNull()
 			}
 		}
 
