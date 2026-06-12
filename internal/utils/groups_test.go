@@ -261,18 +261,18 @@ func TestStatementWithCondition_Marshal(t *testing.T) {
 			},
 			validate: func(t *testing.T, jsonOutput string) {
 				// Parse as map to check if Condition key is absent
-				var raw map[string]interface{}
+				var raw map[string]any
 				if err := json.Unmarshal([]byte(jsonOutput), &raw); err != nil {
 					t.Fatalf("Failed to unmarshal output: %v", err)
 				}
-				statements, ok := raw["Statement"].([]interface{})
+				statements, ok := raw["Statement"].([]any)
 				if !ok {
 					t.Fatal("Statement field is not an array")
 				}
 				if len(statements) == 0 {
 					t.Fatal("Statement array is empty")
 				}
-				stmt, ok := statements[0].(map[string]interface{})
+				stmt, ok := statements[0].(map[string]any)
 				if !ok {
 					t.Fatal("Statement[0] is not a map")
 				}

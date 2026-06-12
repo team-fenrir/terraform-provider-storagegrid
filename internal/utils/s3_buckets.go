@@ -73,9 +73,9 @@ type DefaultRetentionSetting struct {
 func (d *DefaultRetentionSetting) UnmarshalJSON(data []byte) error {
 	// First try to unmarshal into a flexible structure that can handle both strings and numbers
 	aux := &struct {
-		Mode  string      `json:"mode"`
-		Days  interface{} `json:"days,omitempty"`
-		Years interface{} `json:"years,omitempty"`
+		Mode  string `json:"mode"`
+		Days  any    `json:"days,omitempty"`
+		Years any    `json:"years,omitempty"`
 	}{}
 
 	if err := json.Unmarshal(data, aux); err != nil {
@@ -151,7 +151,7 @@ type DeleteObjectStatusConfig struct {
 
 // CrossGridReplicationConfig represents cross-grid replication settings.
 type CrossGridReplicationConfig struct {
-	Rules []interface{} `json:"rules"`
+	Rules []any `json:"rules"`
 }
 
 // getCachedBucketList retrieves the bucket list with caching support.
@@ -615,7 +615,7 @@ func (c *Client) createTemporaryAccessKey() (*s3AccessKey, error) {
 	// Create request body for temporary access key with 2-hour expiration
 	// This is long enough for any terraform operation but short enough to not accumulate
 	expirationTime := time.Now().Add(2 * time.Hour)
-	requestBody := []byte(fmt.Sprintf(`{"expires": "%s"}`, expirationTime.Format("2006-01-02T15:04:05.000Z")))
+	requestBody := fmt.Appendf(nil, `{"expires": "%s"}`, expirationTime.Format("2006-01-02T15:04:05.000Z"))
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
 	if err != nil {

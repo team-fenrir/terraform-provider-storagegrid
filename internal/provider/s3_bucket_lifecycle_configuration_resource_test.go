@@ -14,8 +14,6 @@ import (
 	"github.com/team-fenrir/terraform-provider-storagegrid/internal/utils"
 )
 
-func boolPtr(b bool) *bool { return &b }
-
 func TestBuildLifecycleConfiguration(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -126,7 +124,7 @@ func TestBuildLifecycleConfiguration(t *testing.T) {
 					{
 						ID:         "rule-1",
 						Status:     "Enabled",
-						Expiration: &utils.Expiration{ExpiredObjectDeleteMarker: boolPtr(true)},
+						Expiration: &utils.Expiration{ExpiredObjectDeleteMarker: new(true)},
 					},
 				},
 			},
@@ -149,7 +147,7 @@ func TestBuildLifecycleConfiguration(t *testing.T) {
 					{
 						ID:         "rule-1",
 						Status:     "Enabled",
-						Expiration: &utils.Expiration{ExpiredObjectDeleteMarker: boolPtr(false)},
+						Expiration: &utils.Expiration{ExpiredObjectDeleteMarker: new(false)},
 					},
 				},
 			},
@@ -295,7 +293,7 @@ func TestMapLifecycleRules(t *testing.T) {
 			name: "expiration with expired_object_delete_marker",
 			config: &utils.LifecycleConfiguration{
 				Rules: []utils.Rule{
-					{ID: "rule-1", Status: "Enabled", Expiration: &utils.Expiration{ExpiredObjectDeleteMarker: boolPtr(true)}},
+					{ID: "rule-1", Status: "Enabled", Expiration: &utils.Expiration{ExpiredObjectDeleteMarker: new(true)}},
 				},
 			},
 			want: []LifecycleRuleResourceModel{

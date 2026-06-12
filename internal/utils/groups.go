@@ -33,7 +33,7 @@ type GroupData struct {
 
 // Policies contains the policy definitions for the group.
 type Policies struct {
-	Management ManagementPolicy `json:"management,omitempty"`
+	Management ManagementPolicy `json:"management"`
 	S3         S3Policy         `json:"s3"`
 }
 
