@@ -262,6 +262,166 @@ func TestCreateS3BucketRequest(t *testing.T) {
 	}
 }
 
+func TestGetS3BucketPolicy(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("method = %s, want %s", r.Method, http.MethodGet)
+		}
+		if r.URL.Path != "/api/v4/org/containers/logs/policy" {
+			t.Fatalf("path = %s, want /api/v4/org/containers/logs/policy", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			t.Fatalf("Authorization = %q, want Bearer test-token", got)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"status": "success",
+			"data": {
+				"policy": {
+					"Id": "123456",
+					"Version": "2015-09-08",
+					"Statement": [
+						{
+							"Sid": "AllowObjectRead",
+							"Effect": "Allow",
+							"Action": "s3:GetObject",
+							"NotAction": "s3:DeleteObject",
+							"Resource": ["arn:aws:s3:::logs/*"],
+							"NotResource": ["arn:aws:s3:::logs/private/*"],
+							"Principal": "*",
+							"NotPrincipal": "urn:sgws:identity::123456789012:group/blocked"
+						}
+					]
+				}
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	client := &Client{
+		EndpointURL: server.URL,
+		HTTPClient:  server.Client(),
+		Token:       "test-token",
+	}
+
+	policy, err := client.GetS3BucketPolicy("logs")
+	if err != nil {
+		t.Fatalf("GetS3BucketPolicy returned error: %v", err)
+	}
+	if policy.Id != "123456" || policy.Version != "2015-09-08" {
+		t.Fatalf("policy = %#v", policy)
+	}
+	if len(policy.Statement) != 1 {
+		t.Fatalf("len(policy.Statement) = %d, want 1", len(policy.Statement))
+	}
+	statement := policy.Statement[0]
+	if statement.Principal != "*" {
+		t.Fatalf("Principal = %#v, want *", statement.Principal)
+	}
+	if !reflect.DeepEqual(statement.NotAction, StringOrSlice{"s3:DeleteObject"}) {
+		t.Fatalf("NotAction = %#v", statement.NotAction)
+	}
+	if !reflect.DeepEqual(statement.NotResource, StringOrSlice{"arn:aws:s3:::logs/private/*"}) {
+		t.Fatalf("NotResource = %#v", statement.NotResource)
+	}
+}
+
+func TestDecodeS3BucketPolicyResponseRejectsMalformedSuccess(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "empty object",
+			body: `{}`,
+		},
+		{
+			name: "missing policy",
+			body: `{"status":"success","data":{}}`,
+		},
+		{
+			name: "missing statement",
+			body: `{"status":"success","data":{"policy":{"Version":"2015-09-08"}}}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := decodeS3BucketPolicyResponse([]byte(tt.body)); err == nil {
+				t.Fatal("expected error, got nil")
+			}
+		})
+	}
+}
+
+func TestPutS3BucketPolicy(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Fatalf("method = %s, want %s", r.Method, http.MethodPut)
+		}
+		if r.URL.Path != "/api/v4/org/containers/logs/policy" {
+			t.Fatalf("path = %s, want /api/v4/org/containers/logs/policy", r.URL.Path)
+		}
+		if got := r.Header.Get("Content-Type"); got != "application/json" {
+			t.Fatalf("Content-Type = %q, want application/json", got)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			t.Fatalf("Authorization = %q, want Bearer test-token", got)
+		}
+
+		var got S3BucketPolicyBody
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("failed to decode request body: %v", err)
+		}
+		if got.Policy.Id != "123456" || got.Policy.Version != "2015-09-08" {
+			t.Fatalf("request policy = %#v", got.Policy)
+		}
+		if len(got.Policy.Statement) != 1 {
+			t.Fatalf("len(request policy.Statement) = %d, want 1", len(got.Policy.Statement))
+		}
+		statement := got.Policy.Statement[0]
+		if statement.Principal != "*" {
+			t.Fatalf("Principal = %#v, want *", statement.Principal)
+		}
+		if !reflect.DeepEqual(statement.Action, StringOrSlice{"s3:GetObject"}) {
+			t.Fatalf("Action = %#v", statement.Action)
+		}
+		if !reflect.DeepEqual(statement.NotResource, StringOrSlice{"arn:aws:s3:::logs/private/*"}) {
+			t.Fatalf("NotResource = %#v", statement.NotResource)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"success","data":{"policy":{"Statement":[]}}}`))
+	}))
+	defer server.Close()
+
+	client := &Client{
+		EndpointURL: server.URL,
+		HTTPClient:  server.Client(),
+		Token:       "test-token",
+	}
+
+	policy := S3Policy{
+		Id:      "123456",
+		Version: "2015-09-08",
+		Statement: []Statement{
+			{
+				Sid:         "AllowObjectRead",
+				Effect:      "Allow",
+				Action:      StringOrSlice{"s3:GetObject"},
+				Resource:    StringOrSlice{"arn:aws:s3:::logs/*"},
+				NotResource: StringOrSlice{"arn:aws:s3:::logs/private/*"},
+				Principal:   "*",
+			},
+		},
+	}
+
+	if err := client.PutS3BucketPolicy("logs", policy); err != nil {
+		t.Fatalf("PutS3BucketPolicy returned error: %v", err)
+	}
+}
+
 func TestIsTimeoutError(t *testing.T) {
 	tests := []struct {
 		name string

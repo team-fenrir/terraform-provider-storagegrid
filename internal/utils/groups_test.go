@@ -188,6 +188,44 @@ func TestStatementWithCondition_Unmarshal(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "Bucket policy statement with principal and negated fields",
+			policyJSON: `{
+				"Id": "123456",
+				"Version": "2015-09-08",
+				"Statement": [
+					{
+						"Sid": "BucketPolicyStatement",
+						"Effect": "Allow",
+						"Action": "s3:GetObject",
+						"NotAction": "s3:DeleteObject",
+						"Resource": "arn:aws:s3:::mybucket/*",
+						"NotResource": "arn:aws:s3:::mybucket/private/*",
+						"Principal": "*",
+						"NotPrincipal": "urn:sgws:identity::123456789012:group/blocked"
+					}
+				]
+			}`,
+			expectedError: false,
+			validateResult: func(t *testing.T, policy S3Policy) {
+				if policy.Id != "123456" || policy.Version != "2015-09-08" {
+					t.Fatalf("policy metadata = %#v", policy)
+				}
+				stmt := policy.Statement[0]
+				if stmt.Principal != "*" {
+					t.Errorf("Principal = %#v, want *", stmt.Principal)
+				}
+				if len(stmt.NotAction) != 1 || stmt.NotAction[0] != "s3:DeleteObject" {
+					t.Errorf("NotAction = %#v", stmt.NotAction)
+				}
+				if len(stmt.NotResource) != 1 || stmt.NotResource[0] != "arn:aws:s3:::mybucket/private/*" {
+					t.Errorf("NotResource = %#v", stmt.NotResource)
+				}
+				if stmt.NotPrincipal != "urn:sgws:identity::123456789012:group/blocked" {
+					t.Errorf("NotPrincipal = %#v", stmt.NotPrincipal)
+				}
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -371,5 +409,25 @@ func TestStatementCondition_RoundTrip(t *testing.T) {
 	}
 	if len(stmt.Condition["StringLike"]["s3:prefix"]) != 2 {
 		t.Error("Prefix values should be preserved after round-trip")
+	}
+}
+
+func TestS3PolicyMarshalNilStatementAsEmptyArray(t *testing.T) {
+	policyBytes, err := json.Marshal(S3Policy{})
+	if err != nil {
+		t.Fatalf("json.Marshal returned error: %v", err)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(policyBytes, &got); err != nil {
+		t.Fatalf("json.Unmarshal returned error: %v", err)
+	}
+
+	statements, ok := got["Statement"].([]any)
+	if !ok {
+		t.Fatalf("Statement = %#v, want array", got["Statement"])
+	}
+	if len(statements) != 0 {
+		t.Fatalf("len(Statement) = %d, want 0", len(statements))
 	}
 }
