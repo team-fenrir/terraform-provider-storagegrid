@@ -374,6 +374,9 @@ func TestPutS3BucketPolicy(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
 			t.Fatalf("failed to decode request body: %v", err)
 		}
+		if got.Policy == nil {
+			t.Fatal("request policy is nil")
+		}
 		if got.Policy.Id != "123456" || got.Policy.Version != "2015-09-08" {
 			t.Fatalf("request policy = %#v", got.Policy)
 		}
@@ -419,6 +422,43 @@ func TestPutS3BucketPolicy(t *testing.T) {
 
 	if err := client.PutS3BucketPolicy("logs", policy); err != nil {
 		t.Fatalf("PutS3BucketPolicy returned error: %v", err)
+	}
+}
+
+func TestClearS3BucketPolicy(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Fatalf("method = %s, want %s", r.Method, http.MethodPut)
+		}
+		if r.URL.Path != "/api/v4/org/containers/logs/policy" {
+			t.Fatalf("path = %s, want /api/v4/org/containers/logs/policy", r.URL.Path)
+		}
+
+		var got map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("failed to decode request body: %v", err)
+		}
+		policy, exists := got["policy"]
+		if !exists {
+			t.Fatal("request body missing policy field")
+		}
+		if policy != nil {
+			t.Fatalf("policy = %#v, want nil", policy)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"success","data":{"policy":null}}`))
+	}))
+	defer server.Close()
+
+	client := &Client{
+		EndpointURL: server.URL,
+		HTTPClient:  server.Client(),
+		Token:       "test-token",
+	}
+
+	if err := client.ClearS3BucketPolicy("logs"); err != nil {
+		t.Fatalf("ClearS3BucketPolicy returned error: %v", err)
 	}
 }
 

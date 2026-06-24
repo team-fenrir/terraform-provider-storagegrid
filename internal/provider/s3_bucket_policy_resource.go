@@ -47,7 +47,7 @@ func (r *S3BucketPolicyResource) Metadata(ctx context.Context, req resource.Meta
 
 func (r *S3BucketPolicyResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Manages the S3 bucket policy for a StorageGrid S3 bucket. StorageGrid does not provide a DELETE method for bucket policies, so destroying this resource clears the policy with a PUT request containing an empty Statement array.",
+		Description: "Manages the S3 bucket policy for a StorageGrid S3 bucket. StorageGrid does not provide a DELETE method for bucket policies, so destroying this resource clears the policy with a PUT request containing a null policy.",
 		Attributes: map[string]schema.Attribute{
 			"bucket_name": schema.StringAttribute{
 				Description: "The name of the S3 bucket to configure the policy for.",
@@ -250,7 +250,7 @@ func (r *S3BucketPolicyResource) Delete(ctx context.Context, req resource.Delete
 	}
 
 	bucketName := state.BucketName.ValueString()
-	err := r.client.PutS3BucketPolicy(bucketName, emptyS3BucketPolicy())
+	err := r.client.ClearS3BucketPolicy(bucketName)
 	if err != nil {
 		if isNotFoundError(err) {
 			return

@@ -397,7 +397,7 @@ type S3BucketPolicyAPIResponse struct {
 
 // S3BucketPolicyBody represents the request/response payload for bucket policies.
 type S3BucketPolicyBody struct {
-	Policy S3Policy `json:"policy"`
+	Policy *S3Policy `json:"policy"`
 }
 
 func decodeS3BucketPolicyResponse(body []byte) (*S3Policy, error) {
@@ -408,11 +408,11 @@ func decodeS3BucketPolicyResponse(body []byte) (*S3Policy, error) {
 	if apiResponse.Status != "" && apiResponse.Status != "success" {
 		return nil, fmt.Errorf("S3 bucket policy read failed with status: %s", apiResponse.Status)
 	}
-	if apiResponse.Data.Policy.Statement == nil {
+	if apiResponse.Data.Policy == nil || apiResponse.Data.Policy.Statement == nil {
 		return nil, fmt.Errorf("S3 bucket policy response missing data.policy.Statement")
 	}
 
-	return &apiResponse.Data.Policy, nil
+	return apiResponse.Data.Policy, nil
 }
 
 // GetS3BucketPolicy retrieves the policy for a specific S3 bucket.
@@ -437,10 +437,19 @@ func (c *Client) GetS3BucketPolicy(bucketName string) (*S3Policy, error) {
 
 // PutS3BucketPolicy updates the policy for a specific S3 bucket.
 func (c *Client) PutS3BucketPolicy(bucketName string, policy S3Policy) error {
+	return c.putS3BucketPolicy(bucketName, S3BucketPolicyBody{Policy: &policy})
+}
+
+// ClearS3BucketPolicy clears the policy for a specific S3 bucket.
+func (c *Client) ClearS3BucketPolicy(bucketName string) error {
+	return c.putS3BucketPolicy(bucketName, S3BucketPolicyBody{})
+}
+
+func (c *Client) putS3BucketPolicy(bucketName string, policyBody S3BucketPolicyBody) error {
 	url := fmt.Sprintf("%s/api/v4/org/containers/%s/policy", c.EndpointURL, bucketName)
 	log.Printf("Executing PUT request to URL: %s", url)
 
-	requestBody, err := json.Marshal(S3BucketPolicyBody{Policy: policy})
+	requestBody, err := json.Marshal(policyBody)
 	if err != nil {
 		return fmt.Errorf("error marshalling bucket policy request: %w", err)
 	}
