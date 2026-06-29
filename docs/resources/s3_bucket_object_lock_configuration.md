@@ -59,3 +59,14 @@ Optional:
 - `days` (Number) Retention period in days.
 - `mode` (String) The retention mode (compliance or governance).
 - `years` (Number) Retention period in years.
+
+## Import
+
+Import is supported using the following syntax:
+
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
+```shell
+# Import by bucket name; object lock must be enabled.
+terraform import storagegrid_s3_bucket_object_lock_configuration.compliance compliance-bucket
+```

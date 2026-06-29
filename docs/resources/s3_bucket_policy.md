@@ -44,3 +44,14 @@ resource "storagegrid_s3_bucket_policy" "logs" {
 ### Read-Only
 
 - `id` (String) The unique identifier for the bucket policy (same as bucket_name).
+
+## Import
+
+Import is supported using the following syntax:
+
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
+```shell
+# Import by bucket name; the bucket policy must exist.
+terraform import storagegrid_s3_bucket_policy.logs logs-bucket
+```

@@ -121,3 +121,14 @@ Optional:
 - `manage_own_s3_credentials` (Boolean) Permission to manage own S3 credentials.
 - `root_access` (Boolean) Grants root access permissions to the group.
 - `view_all_containers` (Boolean) Permission to view all containers.
+
+## Import
+
+Import is supported using the following syntax:
+
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
+```shell
+# Import by group name without the group/ prefix.
+terraform import storagegrid_group.admin admin-group
+```
