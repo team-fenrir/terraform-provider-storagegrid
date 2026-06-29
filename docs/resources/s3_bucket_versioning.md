@@ -40,3 +40,14 @@ resource "storagegrid_s3_bucket_versioning" "archive" {
 ### Read-Only
 
 - `id` (String) The unique identifier for the versioning configuration (same as bucket_name).
+
+## Import
+
+Import is supported using the following syntax:
+
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
+```shell
+# Import by bucket name.
+terraform import storagegrid_s3_bucket_versioning.data my-data-bucket
+```

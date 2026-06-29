@@ -142,3 +142,14 @@ Optional:
 Optional:
 
 - `noncurrent_days` (Number) Number of days after an object becomes noncurrent when it expires.
+
+## Import
+
+Import is supported using the following syntax:
+
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
+```shell
+# Import by bucket name.
+terraform import storagegrid_s3_bucket_lifecycle_configuration.data my-data-bucket
+```

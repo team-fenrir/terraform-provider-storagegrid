@@ -386,6 +386,101 @@ func (c *Client) GetS3Bucket(bucketName string) (*S3BucketData, error) {
 	return nil, fmt.Errorf("bucket %s not found", bucketName)
 }
 
+// S3BucketPolicyAPIResponse represents the API response structure for bucket policies.
+type S3BucketPolicyAPIResponse struct {
+	ResponseTime string             `json:"responseTime"`
+	Status       string             `json:"status"`
+	APIVersion   string             `json:"apiVersion"`
+	Deprecated   bool               `json:"deprecated"`
+	Data         S3BucketPolicyBody `json:"data"`
+}
+
+// S3BucketPolicyBody represents the request/response payload for bucket policies.
+type S3BucketPolicyBody struct {
+	Policy *S3Policy `json:"policy"`
+}
+
+func decodeS3BucketPolicyResponse(body []byte) (*S3Policy, error) {
+	var apiResponse S3BucketPolicyAPIResponse
+	if err := json.Unmarshal(body, &apiResponse); err != nil {
+		return nil, fmt.Errorf("error unmarshalling S3 bucket policy response: %w", err)
+	}
+	if apiResponse.Status != "" && apiResponse.Status != "success" {
+		return nil, fmt.Errorf("S3 bucket policy read failed with status: %s", apiResponse.Status)
+	}
+	if apiResponse.Data.Policy == nil || apiResponse.Data.Policy.Statement == nil {
+		return nil, fmt.Errorf("S3 bucket policy response missing data.policy.Statement")
+	}
+
+	return apiResponse.Data.Policy, nil
+}
+
+// GetS3BucketPolicy retrieves the policy for a specific S3 bucket.
+func (c *Client) GetS3BucketPolicy(bucketName string) (*S3Policy, error) {
+	url := fmt.Sprintf("%s/api/v4/org/containers/%s/policy", c.EndpointURL, bucketName)
+	log.Printf("Executing GET request to URL: %s", url)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error creating request: %w", err)
+	}
+
+	req.Header.Set("accept", "application/json")
+
+	body, err := c.doRequest(req)
+	if err != nil {
+		return nil, fmt.Errorf("error executing request: %w", err)
+	}
+
+	return decodeS3BucketPolicyResponse(body)
+}
+
+// PutS3BucketPolicy updates the policy for a specific S3 bucket.
+func (c *Client) PutS3BucketPolicy(bucketName string, policy S3Policy) error {
+	return c.putS3BucketPolicy(bucketName, S3BucketPolicyBody{Policy: &policy})
+}
+
+// ClearS3BucketPolicy clears the policy for a specific S3 bucket.
+func (c *Client) ClearS3BucketPolicy(bucketName string) error {
+	return c.putS3BucketPolicy(bucketName, S3BucketPolicyBody{})
+}
+
+func (c *Client) putS3BucketPolicy(bucketName string, policyBody S3BucketPolicyBody) error {
+	url := fmt.Sprintf("%s/api/v4/org/containers/%s/policy", c.EndpointURL, bucketName)
+	log.Printf("Executing PUT request to URL: %s", url)
+
+	requestBody, err := json.Marshal(policyBody)
+	if err != nil {
+		return fmt.Errorf("error marshalling bucket policy request: %w", err)
+	}
+
+	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return fmt.Errorf("error creating PUT request: %w", err)
+	}
+
+	req.Header.Set("accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+
+	body, err := c.doRequest(req)
+	if err != nil {
+		return fmt.Errorf("error executing PUT request: %w", err)
+	}
+	if len(body) == 0 {
+		return nil
+	}
+
+	var apiResponse S3BucketPolicyAPIResponse
+	if err := json.Unmarshal(body, &apiResponse); err != nil {
+		return fmt.Errorf("error unmarshalling bucket policy update response: %w", err)
+	}
+	if apiResponse.Status != "" && apiResponse.Status != "success" {
+		return fmt.Errorf("bucket policy update failed with status: %s", apiResponse.Status)
+	}
+
+	return nil
+}
+
 // S3BucketVersioningAPIResponse represents the API response structure for bucket versioning.
 type S3BucketVersioningAPIResponse struct {
 	ResponseTime string                 `json:"responseTime"`

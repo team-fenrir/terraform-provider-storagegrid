@@ -44,13 +44,30 @@ type S3Policy struct {
 	Statement []Statement `json:"Statement"`
 }
 
+// MarshalJSON ensures empty policies encode as {"Statement":[]} rather than
+// {"Statement":null}.
+func (p S3Policy) MarshalJSON() ([]byte, error) {
+	type s3Policy S3Policy
+
+	policy := s3Policy(p)
+	if policy.Statement == nil {
+		policy.Statement = []Statement{}
+	}
+
+	return json.Marshal(policy)
+}
+
 // Statement defines a single rule within a policy.
 type Statement struct {
-	Sid       string                              `json:"Sid,omitempty"`
-	Effect    string                              `json:"Effect"`
-	Action    StringOrSlice                       `json:"Action"`
-	Resource  StringOrSlice                       `json:"Resource"`
-	Condition map[string]map[string]StringOrSlice `json:"Condition,omitempty"`
+	Sid          string                              `json:"Sid,omitempty"`
+	Effect       string                              `json:"Effect"`
+	Action       StringOrSlice                       `json:"Action,omitempty"`
+	NotAction    StringOrSlice                       `json:"NotAction,omitempty"`
+	Resource     StringOrSlice                       `json:"Resource,omitempty"`
+	NotResource  StringOrSlice                       `json:"NotResource,omitempty"`
+	Condition    map[string]map[string]StringOrSlice `json:"Condition,omitempty"`
+	Principal    any                                 `json:"Principal,omitempty"`
+	NotPrincipal any                                 `json:"NotPrincipal,omitempty"`
 }
 
 type ManagementPolicy struct {
