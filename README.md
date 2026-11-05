@@ -280,3 +280,13 @@ Read-Only:
 - `member_of` (List of String)
 - `unique_name` (String)
 - `user_urn` (String)
+
+## Development
+
+Requires Go 1.27.3 or newer, Terraform CLI, and golangci-lint v2.
+
+- `make build` builds the provider.
+- `make test` runs unit tests without a StorageGRID instance.
+- `make lint` runs the configured linters.
+- `make generate` formats examples and regenerates documentation and copyright headers.
+- `make testacc` runs acceptance tests against StorageGRID. Set `STORAGEGRID_ENDPOINT`, `STORAGEGRID_ACCOUNTID`, `STORAGEGRID_USERNAME`, and `STORAGEGRID_PASSWORD` for a test tenant first. These tests create and delete resources.
