@@ -2,14 +2,14 @@ name: Terraform Provider Download Tracker
 
 on:
   schedule:
-    # Run daily at 6:00 AM UTC
-    - cron: '0 6 * * *'
+    # Run weekly on Mondays at 06:37 UTC, away from the busy start of the hour.
+    - cron: '37 6 * * 1'
   workflow_dispatch: # Allow manual triggering
 
 env:
   PROVIDER_NAMESPACE: team-fenrir
   PROVIDER_NAME: storagegrid
-  DOWNLOADS_MILESTONE: 100
+  DOWNLOADS_MILESTONE: 1000
 
 jobs:
   track-downloads:
@@ -17,12 +17,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v7.0.0
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v6
-      with:
-        node-version: '20'
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Create downloads tracking directory
       run: mkdir -p .downloads-tracker
